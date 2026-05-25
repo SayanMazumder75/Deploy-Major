@@ -11,8 +11,6 @@ import AIActions from '../../components/ai/AIActions';
 import FlashcardManager from '../../components/flashcards/FlashcardManager';
 import QuizManager from '../../components/quizzes/QuizManager';
 
-
-
 const DocumentDetailPage = () => {
 
   const { id } = useParams();
@@ -32,6 +30,7 @@ const DocumentDetailPage = () => {
         setLoading(false);
       }
     };
+
     fetchDocumentDetails();
   }, [id]);
 
@@ -41,45 +40,67 @@ const DocumentDetailPage = () => {
 
     const filePath = document.data.filePath;
 
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    if (
+      filePath.startsWith('http://') ||
+      filePath.startsWith('https://')
+    ) {
       return filePath;
     }
 
-    const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    return `${baseUrl}${filePath.startsWith('/') ? '' : '/'}${filePath}`;
+    const baseUrl =
+      process.env.REACT_APP_API_URL ||
+      'http://localhost:8000';
+
+    return `${baseUrl}${filePath.startsWith('/') ? '' : '/'
+      }${filePath}`;
   };
 
   const renderContent = () => {
+
     if (loading) {
       return <Spinner />;
     }
 
-    if (!document || !document.data || !document.data.filePath) {
-      return <div className="text-center p-8">PDF not available.</div>;
+    if (
+      !document ||
+      !document.data ||
+      !document.data.filePath
+    ) {
+      return (
+        <div className="text-center p-8">
+          PDF not available.
+        </div>
+      );
     }
 
     const pdfUrl = getPdfUrl();
 
     return (
-      <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-300">
-          <span className="text-sm font-medium text-gray-700">Document Viewer</span>
+      <div className="bg-gradient-to-r from-purple-100 to-pink-100 border border-purple-200 rounded-lg overflow-hidden shadow-sm">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-200 to-pink-200 border-b border-purple-300">
+
+          <span className="text-sm font-medium text-purple-800">
+            Document Viewer
+          </span>
 
           <a
             href={pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:text-pink-700 font-medium transition-colors"
           >
             <ExternalLink size={16} />
             Open in new tab
           </a>
         </div>
 
-        <div className="bg-gray-100 p-1">
+        {/* PDF Viewer */}
+        <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-1">
           <iframe
             src={pdfUrl}
-            className="w-full h-[70vh] bg-white rounded border border-gray-300"
+            className="w-full h-[70vh] bg-white rounded border border-purple-300"
             title="PDF Viewer"
             frameBorder="0"
             style={{
@@ -92,27 +113,47 @@ const DocumentDetailPage = () => {
   };
 
   const renderChat = () => {
-    return <ChatInterface/>
+    return <ChatInterface />;
   };
 
   const renderAIActions = () => {
-    return <AIActions/>
+    return <AIActions />;
   };
 
   const renderFlashcardsTab = () => {
-    return <FlashcardManager documentId={id}/>
+    return <FlashcardManager documentId={id} />;
   };
 
   const renderQuizzesTab = () => {
-    return <QuizManager documentId={id}/>
+    return <QuizManager documentId={id} />;
   };
 
   const tabs = [
-    { name: 'Content', label: 'Content', content: renderContent() },
-    { name: 'Chat', label: 'Chat', content: renderChat() },
-    { name: 'AI Actions', label: 'AI Actions', content: renderAIActions() },
-    { name: 'Flashcards', label: 'Flashcards', content: renderFlashcardsTab() },
-    { name: 'Quizzes', label: 'Quizzes', content: renderQuizzesTab() },
+    {
+      name: 'Content',
+      label: 'Content',
+      content: renderContent(),
+    },
+    {
+      name: 'Chat',
+      label: 'Chat',
+      content: renderChat(),
+    },
+    {
+      name: 'AI Actions',
+      label: 'AI Actions',
+      content: renderAIActions(),
+    },
+    {
+      name: 'Flashcards',
+      label: 'Flashcards',
+      content: renderFlashcardsTab(),
+    },
+    {
+      name: 'Quizzes',
+      label: 'Quizzes',
+      content: renderQuizzesTab(),
+    },
   ];
 
   if (loading) {
@@ -120,23 +161,35 @@ const DocumentDetailPage = () => {
   }
 
   if (!document) {
-    return <div className="text-center p-8">Document not found.</div>;
+    return (
+      <div className="text-center p-8">
+        Document not found.
+      </div>
+    );
   }
 
   return (
     <div>
-        <div className="mb-4">
-            <Link to="/documents" className="inline-flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
-                <ArrowLeft size={16} />
-                Back to Documents
-            </Link>
-        </div>
 
-        <PageHeader title={document.data.title} />
+      <div className="mb-4">
+        <Link
+          to="/documents"
+          className="inline-flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900 transition-colors"
+        >
+          <ArrowLeft size={16} />
+          Back to Documents
+        </Link>
+      </div>
 
-        <Tabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
+      <PageHeader title={document.data.title} />
+
+      <Tabs
+        tabs={tabs}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
     </div>
-)
-}
+  );
+};
 
-export default DocumentDetailPage
+export default DocumentDetailPage;
