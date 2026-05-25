@@ -213,7 +213,17 @@ export const chat = async (req, res, next) => {
         }
 
         // Generate response using Gemini
-        const answer = await geminiService.chatWithContext(question, relevantChunks);
+        const recentMessages = chatHistory.messages //added this PHASE 2
+            .slice(-6)
+            .map(msg => ({
+                role: msg.role,
+                content: msg.content
+            }));
+        const answer = await geminiService.chatWithContext(
+            question,
+            relevantChunks,
+            recentMessages
+        );//Till this 
 
         // Save conversation
         chatHistory.messages.push(

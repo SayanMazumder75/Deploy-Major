@@ -53,14 +53,47 @@ const ChatInterface = () => {
         try {
             const response = await aiService.chat(documentId, userMessage.content);
 
+            // const assistantMessage = {
+            //     role: 'assistant',
+            //     content: response.data.answer,
+            //     timestamp: new Date(),
+            //     relevantChunks: response.data.relevantChunks
+            // };
+
+            // setHistory(prev => [...prev, assistantMessage]);
+
+            //EXTRA CHNAGES (STREAMING AI RESPONSES)
+            const fullText = response.data.answer;
+
             const assistantMessage = {
                 role: 'assistant',
-                content: response.data.answer,
+                content: '',
                 timestamp: new Date(),
                 relevantChunks: response.data.relevantChunks
             };
 
             setHistory(prev => [...prev, assistantMessage]);
+
+            let currentText = '';
+
+            const words = fullText.split(' ');
+
+            for (let i = 0; i < words.length; i++) {
+                currentText += words[i] + ' ';
+
+                await new Promise(resolve => setTimeout(resolve, 10));
+
+                setHistory(prev => {
+                    const updated = [...prev];
+
+                    updated[updated.length - 1] = {
+                        ...assistantMessage,
+                        content: currentText
+                    };
+
+                    return updated;
+                });
+            }
         } catch (error) {
             console.error('Chat error:', error);
 
@@ -93,8 +126,8 @@ const ChatInterface = () => {
 
                 <div
                     className={`max-w-lg p-4 rounded-2xl shadow-sm ${isUser
-                            ? 'bg-linear-to-br from-purple-500 to-pink-500 text-white rounded-br-md'
-                            : 'bg-white border border-purple-200/60 text-slate-800 rounded-bl-md'
+                        ? 'bg-linear-to-br from-purple-500 to-pink-500 text-white rounded-br-md'
+                        : 'bg-white border border-purple-200/60 text-slate-800 rounded-bl-md'
                         }`}
                 >
                     {isUser ? (
@@ -102,6 +135,30 @@ const ChatInterface = () => {
                     ) : (
                         <div className="prose prose-sm max-w-none prose-slate">
                             <MarkdownRenderer content={msg.content} />
+                            {!isUser && ( //PHASE 3
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    <button
+                                        onClick={() => setMessage("Explain this more simply")}
+                                        className="px-3 py-1 text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full transition"
+                                    >
+                                        Explain Simpler
+                                    </button>
+
+                                    <button
+                                        onClick={() => setMessage("Give a real-life example")}
+                                        className="px-3 py-1 text-xs bg-pink-100 hover:bg-pink-200 text-pink-700 rounded-full transition"
+                                    >
+                                        Real-life Example
+                                    </button>
+
+                                    <button
+                                        onClick={() => setMessage("Ask me viva questions")}
+                                        className="px-3 py-1 text-xs bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-full transition"
+                                    >
+                                        Viva Questions
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

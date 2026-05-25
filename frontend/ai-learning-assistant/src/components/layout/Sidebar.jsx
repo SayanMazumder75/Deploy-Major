@@ -67,7 +67,8 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
 
                         <h1 className="text-sm md:text-base font-bold text-white tracking-tight">
 
-                            AI Learning Assistant
+                            {/* AI Learning Assistant */}
+                            MEETMIND AI Learning
 
                         </h1>
 

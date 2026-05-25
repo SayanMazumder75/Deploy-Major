@@ -226,94 +226,126 @@ ${text.substring(0, 15000)}`;
         return questions.slice(0, numQuestions);
 
     } catch (error) {
-    console.error('FULL ERROR:', error);
-    throw error; // 👈 VERY IMPORTANT
-}
+        console.error('FULL ERROR:', error);
+        throw error; // 👈 VERY IMPORTANT
+    }
 };
 
 
 
-    /**
-     * Generate document summary
-     * @param {string} text - Document text
-     * @returns {Promise<string>}
-     */
-    export const generateSummary = async (text) => {
-        const prompt = `Provide a concise summary of the following text, highlighting the key concepts, main ideas, and insights.
+/**
+ * Generate document summary
+ * @param {string} text - Document text
+ * @returns {Promise<string>}
+ */
+export const generateSummary = async (text) => {
+    const prompt = `Provide a concise summary of the following text, highlighting the key concepts, main ideas, and insights.
 Keep the summary clear and structured.
 
 Text:
 ${text.substring(0, 20000)}`;
 
-        try {
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash-lite",
-                contents: prompt,
-            });
-            const generatedText = response.text;
-            return generatedText;
-        } catch (error) {
-            console.error('Gemini API error:', error);
-            throw new Error('Failed to generate summary');
-        }
-    };
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
+        const generatedText = response.text;
+        return generatedText;
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to generate summary');
+    }
+};
 
-    /**
-     * Chat with document context
-     * @param {string} question - User question
-     * @param {Array<Object>} chunks - Relevant document chunks
-     * @returns {Promise<string>}
-     */
-    export const chatWithContext = async (question, chunks) => {
-        const context = chunks.map((c, i) => `[Chunk ${i + 1}]\n${c.content}`).join('\n\n');
+/**
+ * Chat with document context
+ * @param {string} question - User question
+ * @param {Array<Object>} chunks - Relevant document chunks
+ * @returns {Promise<string>}
+ */
+export const chatWithContext = async (
+    question,
+    chunks,
+    previousMessages = []
+) => {
+    const context = chunks.map((c, i) => `[Chunk ${i + 1}]\n${c.content}`).join('\n\n');
+    const conversationHistory = previousMessages //PHASE 2
+    .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
+    .join('\n');
 
-        const prompt = `Based on the following context from a document, analyse the context and answer the user's question.
-If the answer is not in the context, say so.
+    const prompt = `
+You are an intelligent AI Learning Tutor for college students.
 
-Context:
+Your job is to:
+- teach concepts clearly
+- explain in beginner-friendly language
+- help students prepare for exams and viva
+- give examples when useful
+- simplify difficult topics
+- encourage learning
+- answer follow-up questions naturally
+
+IMPORTANT RULES:
+- Use the document context as primary reference
+- If the user asks something slightly beyond the document, still help them
+- If needed, expand using your own educational knowledge
+- Format answers properly using headings and bullet points
+- For technical subjects, explain step-by-step
+- For programming, include examples when useful
+- If the student seems confused, explain more simply
+- Be conversational and supportive
+
+PREVIOUS CONVERSATION:
+${conversationHistory}
+
+DOCUMENT CONTEXT:
 ${context}
 
-Question: ${question}
+STUDENT QUESTION:
+${question}
 
-Answer:`;
+AI TUTOR RESPONSE:
+`;
 
-        try {
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash-lite",
-                contents: prompt,
-            });
 
-            const generatedText = response.text;
-            return generatedText;
-        } catch (error) {
-            console.error('Gemini API error:', error);
-            throw new Error('Failed to process chat request');
-        }
-    };
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
 
-    /**
-     * Explain a specific concept
-     * @param {string} concept - Concept to explain
-     * @param {string} context - Relevant context
-     * @returns {Promise<string>}
-     */
-    export const explainConcept = async (concept, context) => {
-        const prompt = `Explain the concept of "${concept}" based on the following context.
+        const generatedText = response.text;
+        return generatedText;
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to process chat request');
+    }
+};
+
+/**
+ * Explain a specific concept
+ * @param {string} concept - Concept to explain
+ * @param {string} context - Relevant context
+ * @returns {Promise<string>}
+ */
+export const explainConcept = async (concept, context) => {
+    const prompt = `Explain the concept of "${concept}" based on the following context.
 Provide a clear, educational explanation that's easy to understand.
 Include examples if relevant.
 
 Context:
 ${context.substring(0, 10000)}`;
 
-        try {
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash-lite",
-                contents: prompt,
-            });
-           const generatedText = response.text;
-return generatedText;
-} catch (error) {
-    console.error('Gemini API error:', error);
-    throw new Error('Failed to explain concept');
-}
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
+        const generatedText = response.text;
+        return generatedText;
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to explain concept');
+    }
 };
