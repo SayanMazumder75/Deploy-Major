@@ -345,3 +345,129 @@ export const getChatHistory = async (req, res, next) => {
         next(error)
     }
 };
+
+//For AI ACTION PAGE
+export const generateVivaQuestions = async (req, res, next) => {
+    try {
+        const { documentId } = req.body;
+
+        if (!documentId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Please provide documentId',
+                statusCode: 400
+            });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id,
+            status: 'ready'
+        });
+
+        if (!document) {
+            return res.status(404).json({
+                success: false,
+                error: 'Document not found or not ready',
+                statusCode: 404
+            });
+        }
+
+        const vivaQuestions = await geminiService.generateVivaQuestions(
+            document.extractedText
+        );
+
+        res.status(200).json({
+            success: true,
+            data: vivaQuestions,
+            message: 'Viva questions generated successfully'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+//For Revision Notes Generator
+export const generateRevisionNotes = async (req, res, next) => {
+    try {
+        const { documentId } = req.body;
+
+        if (!documentId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Please provide documentId',
+                statusCode: 400
+            });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id,
+            status: 'ready'
+        });
+
+        if (!document) {
+            return res.status(404).json({
+                success: false,
+                error: 'Document not found or not ready',
+                statusCode: 404
+            });
+        }
+
+        const revisionNotes = await geminiService.generateRevisionNotes(
+            document.extractedText
+        );
+
+        res.status(200).json({
+            success: true,
+            data: revisionNotes,
+            message: 'Revision notes generated successfully'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+//Memory tricks
+export const generateMemoryTricks = async (req, res, next) => {
+    try {
+        const { documentId } = req.body;
+
+        if (!documentId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Please provide documentId',
+                statusCode: 400
+            });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id,
+            status: 'ready'
+        });
+
+        if (!document) {
+            return res.status(404).json({
+                success: false,
+                error: 'Document not found or not ready',
+                statusCode: 404
+            });
+        }
+
+        const memoryTricks = await geminiService.generateMemoryTricks(
+            document.extractedText
+        );
+
+        res.status(200).json({
+            success: true,
+            data: memoryTricks,
+            message: 'Memory tricks generated successfully'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};

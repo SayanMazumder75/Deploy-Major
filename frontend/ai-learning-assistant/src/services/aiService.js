@@ -88,13 +88,67 @@ const getChatHistory = async (documentId) => {
     }
 };
 
+//for AI ACTION VIVA
+const generateVivaQuestions = async (documentId) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AI.GENERATE_VIVA,
+            { documentId }
+        );
+
+        return response.data;
+
+    } catch (error) {
+        throw error.response?.data || {
+            message: 'Failed to generate viva questions'
+        };
+    }
+};
+
+//for Revision Notes
+const generateRevisionNotes = async (documentId) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AI.GENERATE_REVISION_NOTES,
+            { documentId }
+        );
+
+        return response.data;
+
+    } catch (error) {
+        throw error.response?.data || {
+            message: 'Failed to generate revision notes'
+        };
+    }
+};
+
+//Memory Tricks
+const generateMemoryTricks = async (documentId) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AI.GENERATE_MEMORY_TRICKS,
+            { documentId }
+        );
+
+        return response.data;
+
+    } catch (error) {
+        throw error.response?.data || {
+            message: 'Failed to generate memory tricks'
+        };
+    }
+};
+
 const aiService = {
     generateFlashcards,
     generateQuiz,
     generateSummary,
+    generateVivaQuestions,
     chat,
     explainConcept,
     getChatHistory,
+    generateRevisionNotes,
+    generateMemoryTricks,
 };
 
 export default aiService;

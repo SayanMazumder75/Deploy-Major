@@ -26,11 +26,12 @@ D: [Difficulty level: easy, medium, or hard]
 Separate each flashcard with "---"
 
 Text:
-${text.substring(0, 15000)}`;
+${text.substring(0, 4000)}`;
 
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash-lite",
+            // model: "gemini-1.5-flash",
             contents: prompt,
         });
 
@@ -271,8 +272,8 @@ export const chatWithContext = async (
 ) => {
     const context = chunks.map((c, i) => `[Chunk ${i + 1}]\n${c.content}`).join('\n\n');
     const conversationHistory = previousMessages //PHASE 2
-    .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
-    .join('\n');
+        .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
+        .join('\n');
 
     const prompt = `
 You are an intelligent AI Learning Tutor for college students.
@@ -347,5 +348,104 @@ ${context.substring(0, 10000)}`;
     } catch (error) {
         console.error('Gemini API error:', error);
         throw new Error('Failed to explain concept');
+    }
+};
+
+//AI ACTION CHANGE AND MODIFICATION (VIVA)
+export const generateVivaQuestions = async (text) => {
+    const prompt = `
+You are an expert college viva examiner.
+
+Based on the following study material, generate 10 viva voce questions.
+
+Rules:
+- Questions should test understanding
+- Mix easy, medium, and difficult questions
+- Questions should sound realistic for college oral exams
+- Keep questions concise and clear
+- Return ONLY the questions as numbered list
+
+STUDY MATERIAL:
+${text.substring(0, 15000)}
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            // model: "gemini-1.5-flash",
+            contents: prompt,
+        });
+
+        return response.text;
+
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to generate viva questions');
+    }
+};
+
+// For Revison notes
+export const generateRevisionNotes = async (text) => {
+    const prompt = `
+You are an expert academic tutor.
+
+Create concise and well-structured revision notes from the following study material.
+
+Rules:
+- Keep notes exam-focused
+- Use headings and bullet points
+- Highlight key concepts
+- Keep explanations concise
+- Include important definitions if needed
+- Make it suitable for last-minute revision
+
+STUDY MATERIAL:
+${text.substring(0, 4000)}
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
+
+        return response.text;
+
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to generate revision notes');
+    }
+};
+
+//Memory Tricks
+export const generateMemoryTricks = async (text) => {
+    const prompt = `
+You are an expert study coach.
+
+Create creative memory tricks and mnemonics from the following study material.
+
+Rules:
+- Generate easy-to-remember tricks
+- Use funny or creative mnemonics if possible
+- Keep explanations concise
+- Make it useful for exam preparation
+- Use bullet points and headings
+- Focus on memorization techniques
+
+STUDY MATERIAL:
+${text.substring(0, 4000)}
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-lite",
+            contents: prompt,
+        });
+
+        return response.text;
+
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error('Failed to generate memory tricks');
     }
 };

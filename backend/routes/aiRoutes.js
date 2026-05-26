@@ -5,7 +5,10 @@ import {
     generateSummary,
     chat,
     explainConcept,
-    getChatHistory
+    getChatHistory,
+    generateVivaQuestions,
+    generateRevisionNotes,
+    generateMemoryTricks
 } from '../controllers/aiController.js';
 import protect from '../middleware/auth.js';
 
@@ -19,5 +22,8 @@ router.post('/generate-summary', generateSummary);
 router.post('/chat', chat);
 router.post('/explain-concept', explainConcept);
 router.get('/chat-history/:documentId', getChatHistory);
+router.post('/generate-viva', generateVivaQuestions);
+router.post('/generate-revision-notes', generateRevisionNotes);
+router.post('/generate-memory-tricks', generateMemoryTricks);
 
 export default router;
