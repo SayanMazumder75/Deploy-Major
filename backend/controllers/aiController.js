@@ -4,6 +4,7 @@ import Quiz from '../models/Quiz.js';
 import ChatHistory from '../models/ChatHistory.js';
 import * as geminiService from '../utils/geminiService.js';
 import { findRelevantChunks } from '../utils/textChunker.js';
+import AIResource from '../models/AIResource.js';
 
 // @desc    Generate flashcards from document
 // @route   POST /api/ai/generate-flashcards
@@ -150,6 +151,15 @@ export const generateSummary = async (req, res, next) => {
 
         // Generate summary using Gemini
         const summary = await geminiService.generateSummary(document.extractedText);
+
+        //Storing the summary permanent
+        await AIResource.create({
+            userId: req.user._id,
+            documentId: document._id,
+            type: 'summary',
+            title: `${document.title} Summary`,
+            content: summary,
+        });
 
         res.status(200).json({
             success: true,
@@ -350,6 +360,7 @@ export const getChatHistory = async (req, res, next) => {
 export const generateVivaQuestions = async (req, res, next) => {
     try {
         const { documentId } = req.body;
+        const userId = req.user.id;
 
         if (!documentId) {
             return res.status(400).json({
@@ -377,6 +388,14 @@ export const generateVivaQuestions = async (req, res, next) => {
             document.extractedText
         );
 
+        await AIResource.create({
+            userId,
+            documentId,
+            type: "viva",
+            title: `${document.title} Viva Questions`,
+            content: vivaQuestions,
+        });
+
         res.status(200).json({
             success: true,
             data: vivaQuestions,
@@ -392,6 +411,7 @@ export const generateVivaQuestions = async (req, res, next) => {
 export const generateRevisionNotes = async (req, res, next) => {
     try {
         const { documentId } = req.body;
+        const userId = req.user.id;
 
         if (!documentId) {
             return res.status(400).json({
@@ -418,6 +438,13 @@ export const generateRevisionNotes = async (req, res, next) => {
         const revisionNotes = await geminiService.generateRevisionNotes(
             document.extractedText
         );
+        await AIResource.create({
+            userId,
+            documentId,
+            type: "revision",
+            title: `${document.title} Revision Notes`,
+            content: revisionNotes,
+        });
 
         res.status(200).json({
             success: true,
@@ -434,6 +461,7 @@ export const generateRevisionNotes = async (req, res, next) => {
 export const generateMemoryTricks = async (req, res, next) => {
     try {
         const { documentId } = req.body;
+        const userId = req.user.id;
 
         if (!documentId) {
             return res.status(400).json({
@@ -460,6 +488,13 @@ export const generateMemoryTricks = async (req, res, next) => {
         const memoryTricks = await geminiService.generateMemoryTricks(
             document.extractedText
         );
+        await AIResource.create({
+            userId,
+            documentId,
+            type: "memory",
+            title: `${document.title} Memory Tricks`,
+            content: memoryTricks,
+        });
 
         res.status(200).json({
             success: true,
@@ -469,5 +504,62 @@ export const generateMemoryTricks = async (req, res, next) => {
 
     } catch (error) {
         next(error);
+    }
+};
+
+
+//For permanent Storing
+export const getAIResources = async (req, res, next) => {
+    try {
+
+        const resources = await AIResource.find({
+            userId: req.user._id
+        })
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            data: resources,
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+//For DELETING
+export const deleteAIResource = async (req, res) => {
+    try {
+
+        const { resourceId } = req.params;
+        const userId = req.user.id;
+
+        const resource = await AIResource.findOne({
+            _id: resourceId,
+            userId,
+        });
+
+        if (!resource) {
+            return res.status(404).json({
+                success: false,
+                message: "Resource not found",
+            });
+        }
+
+        await AIResource.findByIdAndDelete(resourceId);
+
+        res.json({
+            success: true,
+            message: "Resource deleted successfully",
+        });
+
+    } catch (error) {
+
+        console.error("Delete AI Resource Error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to delete resource",
+        });
     }
 };

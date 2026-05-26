@@ -139,6 +139,35 @@ const generateMemoryTricks = async (documentId) => {
     }
 };
 
+//For permanent Storage
+const getAIResources = async () => {
+    try {
+
+        const response = await axiosInstance.get(
+            API_PATHS.AI.GET_RESOURCES
+        );
+
+        return response.data;
+
+    } catch (error) {
+
+        throw error.response?.data || {
+            message: 'Failed to fetch AI resources'
+        };
+    }
+};
+
+//DELETING STUDY VAULT
+export const deleteAIResource = async (resourceId) => {
+
+    const response = await axiosInstance.delete(
+        `/api/ai/resource/${resourceId}`
+    );
+
+    return response.data;
+};
+
+
 const aiService = {
     generateFlashcards,
     generateQuiz,
@@ -149,6 +178,8 @@ const aiService = {
     getChatHistory,
     generateRevisionNotes,
     generateMemoryTricks,
+    getAIResources,
+    deleteAIResource,
 };
 
 export default aiService;

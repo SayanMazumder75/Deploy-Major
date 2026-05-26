@@ -8,7 +8,9 @@ import {
     getChatHistory,
     generateVivaQuestions,
     generateRevisionNotes,
-    generateMemoryTricks
+    generateMemoryTricks,
+    getAIResources,
+    deleteAIResource
 } from '../controllers/aiController.js';
 import protect from '../middleware/auth.js';
 
@@ -25,5 +27,7 @@ router.get('/chat-history/:documentId', getChatHistory);
 router.post('/generate-viva', generateVivaQuestions);
 router.post('/generate-revision-notes', generateRevisionNotes);
 router.post('/generate-memory-tricks', generateMemoryTricks);
+router.get('/resources', getAIResources);
+router.delete("/resource/:resourceId",protect,deleteAIResource);
 
 export default router;

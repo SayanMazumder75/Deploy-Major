@@ -3,6 +3,15 @@ import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
+// import {
+//     LayoutDashboard,
+//     FileText,
+//     User,
+//     LogOut,
+//     BrainCircuit,
+//     BookOpen,
+//     X,
+// } from "lucide-react";
 import {
     LayoutDashboard,
     FileText,
@@ -10,6 +19,7 @@ import {
     LogOut,
     BrainCircuit,
     BookOpen,
+    Brain,
     X,
 } from "lucide-react";
 
@@ -27,6 +37,7 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
         { to: '/dashboard', icon: LayoutDashboard, text: 'Dashboard' },
         { to: '/documents', icon: FileText, text: 'Documents' },
         { to: '/flashcards', icon: BookOpen, text: 'Flashcards' },
+        { to: '/study-vault', icon: Brain, text: 'Study Vault' },
         { to: '/profile', icon: User, text: 'Profile' },
     ];
 
@@ -36,18 +47,16 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
 
             {/* Overlay */}
             <div
-                className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
-                    isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                }`}
+                className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
                 onClick={toggleSidebar}
                 aria-hidden="true"
             ></div>
 
             {/* Sidebar */}
             <aside
-                className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-[#581c87] via-[#6d28d9] to-[#7e22ce] border-r border-white/10 shadow-2xl z-50 md:relative md:w-64 md:shrink-0 md:flex md:flex-col md:translate-x-0 transition-transform duration-300 ease-in-out ${
-                    isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-[#581c87] via-[#6d28d9] to-[#7e22ce] border-r border-white/10 shadow-2xl z-50 md:relative md:w-64 md:shrink-0 md:flex md:flex-col md:translate-x-0 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`}
             >
 
                 {/* Logo */}
@@ -96,10 +105,9 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
                             to={link.to}
                             onClick={toggleSidebar}
                             className={({ isActive }) =>
-                                `group flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 ${
-                                    isActive
-                                        ? 'bg-white/15 text-white shadow-lg backdrop-blur-lg'
-                                        : 'text-purple-100 hover:bg-white/10 hover:text-white'
+                                `group flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 ${isActive
+                                    ? 'bg-white/15 text-white shadow-lg backdrop-blur-lg'
+                                    : 'text-purple-100 hover:bg-white/10 hover:text-white'
                                 }`
                             }
                         >
@@ -111,11 +119,10 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
                                     <link.icon
                                         size={19}
                                         strokeWidth={2.5}
-                                        className={`transition-transform duration-300 ${
-                                            isActive
+                                        className={`transition-transform duration-300 ${isActive
                                                 ? 'scale-110'
                                                 : 'group-hover:scale-110'
-                                        }`}
+                                            }`}
                                     />
 
                                     {link.text}

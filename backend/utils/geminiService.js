@@ -240,8 +240,21 @@ ${text.substring(0, 15000)}`;
  * @returns {Promise<string>}
  */
 export const generateSummary = async (text) => {
-    const prompt = `Provide a concise summary of the following text, highlighting the key concepts, main ideas, and insights.
-Keep the summary clear and structured.
+    const prompt = `
+Create well-structured study notes from the provided document.
+
+Formatting Rules:
+- Use proper markdown formatting
+- Add clear headings and subheadings
+- Leave blank lines between sections
+- Use bullet points where necessary
+- Make important terms bold using markdown
+- Keep spacing clean and readable
+- Organize content like professional study notes
+- Make it easy for students to revise
+
+The response should feel like clean digital study notes.
+
 
 Text:
 ${text.substring(0, 20000)}`;
@@ -354,19 +367,35 @@ ${context.substring(0, 10000)}`;
 //AI ACTION CHANGE AND MODIFICATION (VIVA)
 export const generateVivaQuestions = async (text) => {
     const prompt = `
-You are an expert college viva examiner.
+Generate professional viva and oral exam questions from the study material.
 
-Based on the following study material, generate 10 viva voce questions.
+IMPORTANT FORMATTING RULES:
+- Use markdown formatting
+- Group questions into sections using ## headings
+- Add numbering for every question
+- Leave spacing between questions
+- Keep sections visually separated
+- Make the output clean and readable for students
+- Avoid huge continuous text blocks
 
-Rules:
-- Questions should test understanding
-- Mix easy, medium, and difficult questions
-- Questions should sound realistic for college oral exams
-- Keep questions concise and clear
-- Return ONLY the questions as numbered list
+EXAMPLE FORMAT:
+
+## General Concepts
+
+1. What is software design?
+
+2. Explain modularity in software engineering.
+
+3. What is abstraction?
+
+## Advanced Topics
+
+4. Explain coupling and cohesion.
+
+5. What is architectural design?
 
 STUDY MATERIAL:
-${text.substring(0, 15000)}
+${text.substring(0, 4000)}
 `;
 
     try {
@@ -387,17 +416,17 @@ ${text.substring(0, 15000)}
 // For Revison notes
 export const generateRevisionNotes = async (text) => {
     const prompt = `
-You are an expert academic tutor.
+Create professional revision notes from the provided study material.
 
-Create concise and well-structured revision notes from the following study material.
-
-Rules:
-- Keep notes exam-focused
-- Use headings and bullet points
-- Highlight key concepts
-- Keep explanations concise
-- Include important definitions if needed
-- Make it suitable for last-minute revision
+Formatting Rules:
+- Use markdown formatting
+- Add proper headings and subheadings
+- Leave blank lines between sections
+- Use bullet points for important concepts
+- Highlight keywords using bold markdown
+- Keep notes concise but readable
+- Structure content like premium study notes
+- Make it ideal for exam revision
 
 STUDY MATERIAL:
 ${text.substring(0, 4000)}
@@ -420,17 +449,33 @@ ${text.substring(0, 4000)}
 //Memory Tricks
 export const generateMemoryTricks = async (text) => {
     const prompt = `
-You are an expert study coach.
+Create visually well-structured memory tricks and mnemonics from the study material.
 
-Create creative memory tricks and mnemonics from the following study material.
+IMPORTANT FORMATTING RULES:
+- Use proper markdown formatting
+- Use ## headings for each memory trick section
+- Leave blank lines between sections
+- Use bullet points where appropriate
+- Highlight keywords using bold markdown
+- Keep tricks short, memorable, and visually clean
+- Each trick should feel separated like flash-style revision notes
+- Avoid long paragraphs
+- Make the response highly readable for students
 
-Rules:
-- Generate easy-to-remember tricks
-- Use funny or creative mnemonics if possible
-- Keep explanations concise
-- Make it useful for exam preparation
-- Use bullet points and headings
-- Focus on memorization techniques
+GOOD FORMAT EXAMPLE:
+
+## Memory Trick 1
+
+**Keyword:** Example
+
+- Point 1
+- Point 2
+
+## Memory Trick 2
+
+**Mnemonic:** Example
+
+- Easy explanation
 
 STUDY MATERIAL:
 ${text.substring(0, 4000)}

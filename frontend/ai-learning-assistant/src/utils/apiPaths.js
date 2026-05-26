@@ -24,6 +24,7 @@ export const API_PATHS = {
         GENERATE_VIVA: "/api/ai/generate-viva", //heheheh
         GENERATE_REVISION_NOTES: '/api/ai/generate-revision-notes',
         GENERATE_MEMORY_TRICKS: '/api/ai/generate-memory-tricks',
+        GET_RESOURCES: '/api/ai/resources',
         CHAT: "/api/ai/chat",
         EXPLAIN_CONCEPT: "/api/ai/explain-concept",
         GET_CHAT_HISTORY: (documentId) => `/api/ai/chat-history/${documentId}`,
