@@ -10,6 +10,7 @@ import ChatInterface from '../../components/chat/ChatInterface';
 import AIActions from '../../components/ai/AIActions';
 import FlashcardManager from '../../components/flashcards/FlashcardManager';
 import QuizManager from '../../components/quizzes/QuizManager';
+import VoiceTutor from '../../components/voiceTutor/VoiceTutor';
 
 const DocumentDetailPage = () => {
 
@@ -17,6 +18,7 @@ const DocumentDetailPage = () => {
   const [document, setDocument] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Content');
+
 
   useEffect(() => {
     const fetchDocumentDetails = async () => {
@@ -128,6 +130,9 @@ const DocumentDetailPage = () => {
     return <QuizManager documentId={id} />;
   };
 
+
+
+
   const tabs = [
     {
       name: 'Content',
@@ -153,6 +158,11 @@ const DocumentDetailPage = () => {
       name: 'Quizzes',
       label: 'Quizzes',
       content: renderQuizzesTab(),
+    },
+    {
+      name: 'Voice Tutor',
+      label: 'Voice Tutor',
+      content: <VoiceTutor documentId={id} />,
     },
   ];
 
