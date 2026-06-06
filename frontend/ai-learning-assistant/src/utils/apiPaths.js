@@ -27,6 +27,11 @@ export const API_PATHS = {
         GET_RESOURCES: '/api/ai/resources',
         CHAT: "/api/ai/chat",
         EXPLAIN_CONCEPT: "/api/ai/explain-concept",
+
+        VIVA_QUESTION: '/api/ai/viva-question',
+        VIVA_EVALUATE: '/api/ai/viva-evaluate',
+        VIVA_SAVE: '/api/ai/viva-save',
+        VIVA_SESSIONS: '/api/ai/viva-sessions',
         GET_CHAT_HISTORY: (documentId) => `/api/ai/chat-history/${documentId}`,
     },
 

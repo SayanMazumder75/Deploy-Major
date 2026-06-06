@@ -14,6 +14,8 @@ import {
 } from '../controllers/aiController.js';
 import protect from '../middleware/auth.js';
 
+import { generateVivaQuestion, evaluateVivaAnswer, saveVivaSession, getVivaSessions } from '../controllers/aiController.js';
+
 const router = express.Router();
 
 router.use(protect);
@@ -29,5 +31,10 @@ router.post('/generate-revision-notes', generateRevisionNotes);
 router.post('/generate-memory-tricks', generateMemoryTricks);
 router.get('/resources', getAIResources);
 router.delete("/resource/:resourceId",protect,deleteAIResource);
+
+router.post('/viva-question', generateVivaQuestion);
+router.post('/viva-evaluate', evaluateVivaAnswer);
+router.post('/viva-save', saveVivaSession);
+router.get('/viva-sessions', getVivaSessions);
 
 export default router;

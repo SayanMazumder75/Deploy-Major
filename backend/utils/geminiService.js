@@ -494,3 +494,93 @@ ${text.substring(0, 4000)}
         throw new Error('Failed to generate memory tricks');
     }
 };
+
+// ─── ADD THESE FUNCTIONS TO YOUR geminiService.js ────────────────────────────
+
+export const generateVivaQuestion = async (text, topic, personality, previousQuestions = []) => {
+    const personalityPrompts = {
+        teacher: `You are a calm, encouraging university professor conducting a viva exam. 
+Ask clear, educational questions. Be supportive but thorough. 
+Use phrases like "Good, now tell me...", "Can you elaborate on...", "Interesting, what about..."`,
+
+        friendly: `You are a friendly senior student helping a junior prepare for viva. 
+Ask questions casually and warmly. Keep it relaxed but educational.
+Use phrases like "Okay so explain to me...", "That's cool! But what about...", "Hmm, do you know..."`,
+
+        strict: `You are a strict, no-nonsense viva examiner. You expect precise, accurate answers.
+Ask tough, direct questions. Show no mercy for vague answers. Create real exam pressure.
+Use phrases like "Define exactly...", "That is incorrect. Explain properly...", "Give me a precise answer for..."`,
+
+        motivational: `You are an enthusiastic motivational tutor who makes learning exciting.
+Ask questions with energy and encouragement. Celebrate correct answers. 
+Use phrases like "Amazing! Now challenge yourself with...", "You're doing great! Let's try...", "Come on, you know this one!"`
+    };
+
+    const previousQsList = previousQuestions.length > 0
+        ? `\nPrevious questions already asked (DO NOT repeat these):\n${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+        : '';
+
+    const prompt = `
+${personalityPrompts[personality] || personalityPrompts.teacher}
+
+You are conducting a VOICE viva exam on this study material.
+
+RULES:
+- Ask ONE question at a time
+- Keep the question SHORT (1-2 sentences max) — it will be spoken aloud
+- Focus on the topic: "${topic || 'general concepts from the document'}"
+- Make it progressively harder if this is not the first question
+- Return ONLY the question, nothing else — no labels, no explanation
+${previousQsList}
+
+STUDY MATERIAL:
+${text.substring(0, 3000)}
+
+Ask the next viva question now:
+`;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: prompt,
+    });
+
+    return response.text.trim();
+};
+
+export const evaluateVivaAnswer = async (question, answer, personality, documentText) => {
+    const personalityFeedback = {
+        teacher: "Give warm, educational feedback. Correct mistakes gently. Explain what was missing.",
+        friendly: "Give casual, encouraging feedback. Keep it short and friendly.",
+        strict: "Give direct, blunt feedback. Point out every mistake. No sugarcoating.",
+        motivational: "Give highly enthusiastic feedback. Celebrate what was right, motivate to improve."
+    };
+
+    const prompt = `
+You are a viva examiner. Evaluate the student's answer.
+
+${personalityFeedback[personality] || personalityFeedback.teacher}
+
+RULES:
+- Keep feedback SHORT (2-4 sentences max) — it will be spoken aloud
+- First say if the answer was correct, partially correct, or incorrect
+- Then give the key missing point if any
+- End with a transition to the next question like "Now let's move on" or "Good, next question"
+- Return ONLY the feedback, no labels
+
+QUESTION: ${question}
+STUDENT ANSWER: ${answer}
+
+DOCUMENT CONTEXT:
+${documentText.substring(0, 1000)}
+
+Your feedback:
+`;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: prompt,
+    });
+
+    return response.text.trim();
+};
+

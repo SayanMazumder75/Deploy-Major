@@ -5,6 +5,7 @@ import ChatHistory from '../models/ChatHistory.js';
 import * as geminiService from '../utils/geminiService.js';
 import { findRelevantChunks } from '../utils/textChunker.js';
 import AIResource from '../models/AIResource.js';
+import VivaSession from '../models/VivaSession.js';
 
 // @desc    Generate flashcards from document
 // @route   POST /api/ai/generate-flashcards
@@ -562,4 +563,152 @@ export const deleteAIResource = async (req, res) => {
             message: "Failed to delete resource",
         });
     }
+};
+
+
+// @desc    Generate a single viva question
+// @route   POST /api/ai/viva-question
+// @access  Private
+export const generateVivaQuestion = async (req, res, next) => {
+    try {
+        const { documentId, topic, personality = 'teacher', previousQuestions = [] } = req.body;
+
+        if (!documentId) {
+            return res.status(400).json({ success: false, error: 'Please provide documentId' });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id,
+            status: 'ready'
+        });
+
+        if (!document) {
+            return res.status(404).json({ success: false, error: 'Document not found or not ready' });
+        }
+
+        const question = await geminiService.generateVivaQuestion(
+            document.extractedText,
+            topic,
+            personality,
+            previousQuestions
+        );
+
+        res.status(200).json({
+            success: true,
+            data: { question },
+            message: 'Viva question generated'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Evaluate student's viva answer
+// @route   POST /api/ai/viva-evaluate
+// @access  Private
+export const evaluateVivaAnswer = async (req, res, next) => {
+    try {
+        const { documentId, question, answer, personality = 'teacher' } = req.body;
+
+        if (!documentId || !question || !answer) {
+            return res.status(400).json({ success: false, error: 'Please provide documentId, question and answer' });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id,
+            status: 'ready'
+        });
+
+        if (!document) {
+            return res.status(404).json({ success: false, error: 'Document not found' });
+        }
+
+        const feedback = await geminiService.evaluateVivaAnswer(
+            question,
+            answer,
+            personality,
+            document.extractedText
+        );
+
+        res.status(200).json({
+            success: true,
+            data: { feedback },
+            message: 'Answer evaluated'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Save completed viva session
+// @route   POST /api/ai/viva-save
+// @access  Private
+export const saveVivaSession = async (req, res, next) => {
+    try {
+        const { documentId, personality, topic, exchanges, score, duration } = req.body;
+
+        if (!documentId || !exchanges) {
+            return res.status(400).json({ success: false, error: 'Please provide documentId and exchanges' });
+        }
+
+        const document = await Document.findOne({
+            _id: documentId,
+            userId: req.user._id
+        });
+
+        if (!document) {
+            return res.status(404).json({ success: false, error: 'Document not found' });
+        }
+
+        const session = await VivaSession.create({
+            userId: req.user._id,
+            documentId,
+            documentTitle: document.title,
+            personality,
+            topic: topic || 'General',
+            exchanges,
+            score: score || 0,
+            duration: duration || 0,
+            weakTopics: extractWeakTopics(exchanges),
+        });
+
+        res.status(201).json({
+            success: true,
+            data: session,
+            message: 'Viva session saved successfully'
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Get all viva sessions for user
+// @route   GET /api/ai/viva-sessions
+// @access  Private
+export const getVivaSessions = async (req, res, next) => {
+    try {
+        const sessions = await VivaSession.find({ userId: req.user._id })
+            .sort({ createdAt: -1 })
+            .limit(20);
+
+        res.status(200).json({
+            success: true,
+            data: sessions,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Helper: extract weak topics from exchanges where student struggled
+const extractWeakTopics = (exchanges) => {
+    return exchanges
+        .filter(e => e.quality === 'poor' || e.quality === 'partial')
+        .map(e => e.question.split(' ').slice(0, 6).join(' ') + '...')
+        .slice(0, 5);
 };

@@ -168,6 +168,51 @@ export const deleteAIResource = async (resourceId) => {
 };
 
 
+// ─── ADD THESE TO YOUR frontend/src/services/aiService.js ────────────────────
+
+const generateVivaQuestion = async (documentId, topic, personality, previousQuestions) => {
+    try {
+        const response = await axiosInstance.post(API_PATHS.AI.VIVA_QUESTION, {
+            documentId, topic, personality, previousQuestions
+        });
+        return response.data?.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'Failed to generate viva question' };
+    }
+};
+
+const evaluateVivaAnswer = async (documentId, question, answer, personality) => {
+    try {
+        const response = await axiosInstance.post(API_PATHS.AI.VIVA_EVALUATE, {
+            documentId, question, answer, personality
+        });
+        return response.data?.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'Failed to evaluate answer' };
+    }
+};
+
+const saveVivaSession = async (documentId, sessionData) => {
+    try {
+        const response = await axiosInstance.post(API_PATHS.AI.VIVA_SAVE, {
+            documentId, ...sessionData
+        });
+        return response.data?.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'Failed to save viva session' };
+    }
+};
+
+const getVivaSessions = async () => {
+    try {
+        const response = await axiosInstance.get(API_PATHS.AI.VIVA_SESSIONS);
+        return response.data?.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'Failed to fetch viva sessions' };
+    }
+};
+
+
 const aiService = {
     generateFlashcards,
     generateQuiz,
@@ -180,6 +225,10 @@ const aiService = {
     generateMemoryTricks,
     getAIResources,
     deleteAIResource,
+    generateVivaQuestion,
+    evaluateVivaAnswer,
+    saveVivaSession,
+    getVivaSessions,
 };
 
 export default aiService;
