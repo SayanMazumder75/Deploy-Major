@@ -1,29 +1,23 @@
-import React from "react";
 
+import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
-// import {
-//     LayoutDashboard,
-//     FileText,
-//     User,
-//     LogOut,
-//     BrainCircuit,
-//     BookOpen,
-//     X,
-// } from "lucide-react";
 import {
     LayoutDashboard,
     FileText,
     User,
     LogOut,
-    BrainCircuit,
     BookOpen,
     Brain,
+    BrainCircuit,
     X,
 } from "lucide-react";
 
-const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
+const Sidebar = ({
+    isSidebarOpen,
+    toggleSidebar,
+}) => {
 
     const { logout } = useAuth();
     const navigate = useNavigate();
@@ -34,134 +28,141 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
     };
 
     const navLinks = [
-        { to: '/dashboard', icon: LayoutDashboard, text: 'Dashboard' },
-        { to: '/documents', icon: FileText, text: 'Documents' },
-        { to: '/flashcards', icon: BookOpen, text: 'Flashcards' },
-        { to: '/study-vault', icon: Brain, text: 'Study Vault' },
-        { to: '/profile', icon: User, text: 'Profile' },
+        {
+            to: "/dashboard",
+            icon: LayoutDashboard,
+            text: "Dashboard",
+        },
+        {
+            to: "/documents",
+            icon: FileText,
+            text: "Documents",
+        },
+        {
+            to: "/flashcards",
+            icon: BookOpen,
+            text: "Flashcards",
+        },
+        {
+            to: "/study-vault",
+            icon: Brain,
+            text: "Study Vault",
+        },
+        {
+            to: "/profile",
+            icon: User,
+            text: "Profile",
+        },
     ];
 
     return (
-
         <>
-
             {/* Overlay */}
             <div
-                className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                    }`}
+                className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-all duration-300 ${
+                    isSidebarOpen
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none"
+                }`}
                 onClick={toggleSidebar}
-                aria-hidden="true"
-            ></div>
+            />
 
-            {/* Sidebar */}
             <aside
-                className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-[#581c87] via-[#6d28d9] to-[#7e22ce] border-r border-white/10 shadow-2xl z-50 md:relative md:w-64 md:shrink-0 md:flex md:flex-col md:translate-x-0 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                    }`}
+                className={`fixed top-0 left-0 h-full w-[260px] z-50 md:relative md:translate-x-0 transition-transform duration-300 ${
+                    isSidebarOpen
+                        ? "translate-x-0"
+                        : "-translate-x-full"
+                }`}
             >
 
-                {/* Logo */}
-                <div className="flex items-center justify-between h-16 px-5 border-b border-white/10">
+                <div className="h-full flex flex-col bg-gradient-to-b from-[#5d19c4] via-[#6b21c8] to-[#7e22ce] text-white">
 
-                    <div className="flex items-center gap-3">
+                    {/* Logo */}
+                    <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
 
-                        <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 shadow-lg shadow-pink-500/30">
+                        <div className="flex items-center gap-3">
 
-                            <BrainCircuit
-                                className="text-white"
-                                size={22}
-                                strokeWidth={2.5}
-                            />
+                            <div className="w-12 h-12 rounded-2xl bg-pink-400/20 flex items-center justify-center">
+
+                                <BrainCircuit size={22} />
+
+                            </div>
+
+                            <div>
+
+                                <h1 className="font-bold text-lg">
+                                    MEETMIND
+                                </h1>
+
+                                <p className="text-xs text-purple-100">
+                                    AI Learning
+                                </p>
+
+                            </div>
 
                         </div>
 
-                        <h1 className="text-sm md:text-base font-bold text-white tracking-tight">
-
-                            {/* AI Learning Assistant */}
-                            MEETMIND AI Learning
-
-                        </h1>
+                        <button
+                            onClick={toggleSidebar}
+                            className="md:hidden"
+                        >
+                            <X size={20} />
+                        </button>
 
                     </div>
 
-                    {/* Mobile Close */}
-                    <button
-                        onClick={toggleSidebar}
-                        className="md:hidden text-purple-200 hover:text-white transition-colors duration-200"
-                    >
+                    {/* Navigation */}
+                    <nav className="flex-1 px-4 py-5 space-y-2">
 
-                        <X size={24} />
+                        {navLinks.map((link) => (
 
-                    </button>
+                            <NavLink
+                                key={link.to}
+                                to={link.to}
+                                onClick={toggleSidebar}
+                                className={({ isActive }) =>
+                                    `flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${
+                                        isActive
+                                            ? "bg-white/20 text-white"
+                                            : "text-purple-100 hover:bg-white/10"
+                                    }`
+                                }
+                            >
 
-                </div>
+                                <link.icon size={20} />
 
-                {/* Navigation */}
-                <nav className="flex-1 px-3 py-6 space-y-2">
+                                <span>
+                                    {link.text}
+                                </span>
 
-                    {navLinks.map((link) => (
+                            </NavLink>
 
-                        <NavLink
-                            key={link.to}
-                            to={link.to}
-                            onClick={toggleSidebar}
-                            className={({ isActive }) =>
-                                `group flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 ${isActive
-                                    ? 'bg-white/15 text-white shadow-lg backdrop-blur-lg'
-                                    : 'text-purple-100 hover:bg-white/10 hover:text-white'
-                                }`
-                            }
+                        ))}
+
+                    </nav>
+
+                    {/* Logout */}
+                    <div className="p-4 border-t border-white/10">
+
+                        <button
+                            onClick={handleLogout}
+                            className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition-all"
                         >
 
-                            {({ isActive }) => (
+                            <LogOut size={20} />
 
-                                <>
+                            Logout
 
-                                    <link.icon
-                                        size={19}
-                                        strokeWidth={2.5}
-                                        className={`transition-transform duration-300 ${isActive
-                                                ? 'scale-110'
-                                                : 'group-hover:scale-110'
-                                            }`}
-                                    />
+                        </button>
 
-                                    {link.text}
-
-                                </>
-
-                            )}
-
-                        </NavLink>
-
-                    ))}
-
-                </nav>
-
-                {/* Logout */}
-                <div className="px-3 py-4 border-t border-white/10">
-
-                    <button
-                        onClick={handleLogout}
-                        className="group flex items-center gap-3 w-full px-4 py-3 text-sm font-semibold text-purple-100 hover:bg-red-500/20 hover:text-white rounded-2xl transition-all duration-300"
-                    >
-
-                        <LogOut
-                            size={18}
-                            strokeWidth={2.5}
-                            className="transition-transform duration-300 group-hover:scale-110"
-                        />
-
-                        Logout
-
-                    </button>
+                    </div>
 
                 </div>
 
             </aside>
-
         </>
-
     );
 };
 
 export default Sidebar;
+
