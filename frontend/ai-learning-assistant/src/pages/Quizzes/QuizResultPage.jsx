@@ -56,7 +56,7 @@ const QuizResultPage = () => {
   const incorrectAnswers = totalQuestions - correctAnswers;
 
   const getScoreColor = (score) => {
-    if (score >= 80) return 'from-emerald-500 to-teal-500';
+    if (score >= 80) return 'from-fuchsia-500 to-purple-500';
     if (score >= 60) return 'from-amber-500 to-orange-500';
     return 'from-rose-500 to-red-500';
   };
@@ -68,13 +68,14 @@ const QuizResultPage = () => {
     if (score >= 60) return 'Not bad!';
     return 'Keep practicing!';
   };
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Back Button */}
-      <div className="mb-6" >
+      <div className="mb-6">
         <Link
           to={`/documents/${quiz.document._id}`}
-          className="group inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-600 transition-colors duration-200"
+          className="group inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-fuchsia-500 transition-colors duration-200"
         >
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-200" strokeWidth={2} />
           Back to Document
@@ -86,8 +87,9 @@ const QuizResultPage = () => {
       {/* Score Card */}
       <div className="bg-white/80 backdrop-blur-xl border-2 border-slate-200 rounded-2xl shadow-xl shadow-slate-200/50 p-8 mb-8">
         <div className="text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-br from-emerald-100 to-teal-100 shadow-lg shadow-emerald-500/25">
-            <Trophy className="w-7 h-7 text-emerald-600" strokeWidth={2} />
+          {/* Trophy Icon */}
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-br from-fuchsia-100 to-purple-100 shadow-lg shadow-fuchsia-500/25">
+            <Trophy className="w-7 h-7 text-fuchsia-500" strokeWidth={2} />
           </div>
 
           <div>
@@ -104,7 +106,6 @@ const QuizResultPage = () => {
             </p>
           </div>
 
-
           {/* Stats */}
           <div className="flex items-center justify-center gap-4 pt-4">
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl">
@@ -114,13 +115,15 @@ const QuizResultPage = () => {
               </span>
             </div>
 
-            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" strokeWidth={2} />
-              <span className="text-sm font-semibold text-emerald-700">
+            {/* Correct — fuchsia/purple */}
+            <div className="flex items-center gap-2 px-4 py-2 bg-fuchsia-50 border border-fuchsia-200 rounded-xl">
+              <CheckCircle2 className="w-4 h-4 text-fuchsia-500" strokeWidth={2} />
+              <span className="text-sm font-semibold text-fuchsia-700">
                 {correctAnswers} Correct
               </span>
             </div>
 
+            {/* Incorrect — stays rose */}
             <div className="flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-200 rounded-xl">
               <XCircle className="w-4 h-4 text-rose-600" strokeWidth={2} />
               <span className="text-sm font-semibold text-rose-700">
@@ -165,12 +168,13 @@ const QuizResultPage = () => {
                   </h4>
                 </div>
 
+                {/* Correct/Incorrect icon — fuchsia for correct */}
                 <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${isCorrect
-                  ? 'bg-emerald-50 border-2 border-emerald-200'
+                  ? 'bg-fuchsia-50 border-2 border-fuchsia-200'
                   : 'bg-rose-50 border-2 border-rose-200'
                   }`}>
                   {isCorrect ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" strokeWidth={2.5} />
+                    <CheckCircle2 className="w-5 h-5 text-fuchsia-500" strokeWidth={2.5} />
                   ) : (
                     <XCircle className="w-5 h-5 text-rose-600" strokeWidth={2.5} />
                   )}
@@ -187,7 +191,7 @@ const QuizResultPage = () => {
                     <div
                       key={optIndex}
                       className={`relative px-4 py-3 rounded-lg border-2 transition-all duration-200 ${isCorrectOption
-                        ? 'bg-emerald-50 border-emerald-300 shadow-lg shadow-emerald-500/10'
+                        ? 'bg-fuchsia-50 border-fuchsia-300 shadow-lg shadow-fuchsia-500/10'
                         : isWrongAnswer
                           ? 'bg-rose-50 border-rose-300'
                           : 'bg-slate-50 border-slate-200'
@@ -195,7 +199,7 @@ const QuizResultPage = () => {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className={`text-sm font-medium ${isCorrectOption
-                          ? 'text-emerald-900'
+                          ? 'text-fuchsia-900'
                           : isWrongAnswer
                             ? 'text-rose-900'
                             : 'text-slate-700'
@@ -205,7 +209,7 @@ const QuizResultPage = () => {
 
                         <div className="flex items-center gap-2">
                           {isCorrectOption && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-700">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-fuchsia-100 border border-fuchsia-300 rounded-lg text-xs font-semibold text-fuchsia-700">
                               <CheckCircle2 className="w-3 h-3" strokeWidth={2.5} />
                               Correct
                             </span>
@@ -249,22 +253,20 @@ const QuizResultPage = () => {
         })}
       </div>
 
-      {/* Action Button */}
+      {/* Return to Document Button */}
       <div className="mt-8 flex justify-center">
         <Link to={`/documents/${quiz.document._id}`}>
-          <button className="group relative px-8 h-12 bg-linear-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold text-sm rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/25 active:scale-95 overflow-hidden">
+          <button className="group relative px-8 h-12 bg-linear-to-r from-fuchsia-500 to-purple-500 hover:from-fuchsia-600 hover:to-purple-600 text-white font-semibold text-sm rounded-xl transition-all duration-200 shadow-lg shadow-fuchsia-500/25 active:scale-95 overflow-hidden">
             <span className="relative z-10 flex items-center gap-2">
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-200" strokeWidth={2.5} />
               Return to Document
             </span>
-
             <div className="absolute inset-0 bg-linear-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
           </button>
         </Link>
       </div>
     </div>
-
-  )
+  );
 }
 
 export default QuizResultPage

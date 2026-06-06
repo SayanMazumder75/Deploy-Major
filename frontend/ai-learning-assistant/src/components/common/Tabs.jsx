@@ -10,18 +10,18 @@ const Tabs = ({ tabs, activeTab, setActiveTab }) => {
                         onClick={() => setActiveTab(tab.name)}
                         className={`relative pb-4 px-2 md:px-6 text-sm font-semibold transition-all duration-200 ${
                         activeTab === tab.name
-                                ? 'text-emerald-600'
+                                ? 'text-fuchsia-500'
                                 : 'text-slate-600 hover:text-slate-900'
                                     }`}
                 >
                     <span className="relative z-10">{tab.label}</span>
 
                     {activeTab === tab.name && (
-                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg shadow-emerald-500/25" />
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-fuchsia-400 to-purple-400 rounded-full shadow-lg shadow-fuchsia-400/25" />
                     )}
 
                     {activeTab === tab.name && (
-                        <div className="absolute inset-0 bg-gradient-to-b from-emerald-50/50 to-transparent rounded-t-xl -z-10" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-fuchsia-50/50 to-transparent rounded-t-xl -z-10" />
                     )}
                 </button>
             ))}
