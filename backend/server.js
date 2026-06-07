@@ -15,6 +15,8 @@ import aiRoutes from './routes/aiRoutes.js';
 import quizRoutes from './routes/quizRoutes.js';
 import progressRoutes from './routes/progressRoutes.js';
 
+import calendarRoutes from './routes/calendarRoutes.js';
+
 
 // ES6 module __dirname alternative
 const __filename = fileURLToPath(import.meta.url);
@@ -62,6 +64,8 @@ app.use((req, res) =>{
         statusCode: 404
     });
 });
+
+app.use('/api/calendar', calendarRoutes);
 
 
 //Start server

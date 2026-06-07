@@ -584,3 +584,11 @@ Your feedback:
     return response.text.trim();
 };
 
+
+export const rawGenerate = async (prompt) => {
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: prompt,
+    });
+    return response.text;
+};

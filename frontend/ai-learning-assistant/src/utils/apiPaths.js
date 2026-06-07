@@ -54,4 +54,24 @@ export const API_PATHS = {
     PROGRESS: {
         GET_DASHBOARD: "/api/progress/dashboard",
     },
+
+    CALENDAR: {
+    GET_SESSIONS: '/api/calendar/sessions',
+    CREATE_SESSION: '/api/calendar/sessions',
+    UPDATE_SESSION: (id) => `/api/calendar/sessions/${id}`,
+    DELETE_SESSION: (id) => `/api/calendar/sessions/${id}`,
+    COMPLETE_SESSION: (id) => `/api/calendar/sessions/${id}/complete`,
+    RESCHEDULE_SESSION: (id) => `/api/calendar/sessions/${id}/reschedule`,
+
+    GET_EXAMS: '/api/calendar/exams',
+    CREATE_EXAM: '/api/calendar/exams',
+    UPDATE_EXAM: (id) => `/api/calendar/exams/${id}`,
+    DELETE_EXAM: (id) => `/api/calendar/exams/${id}`,
+
+    DETECT_EXAMS: '/api/calendar/detect-exams',
+    GENERATE_SCHEDULE: '/api/calendar/generate-schedule',
+    AUTO_RESCHEDULE: '/api/calendar/auto-reschedule',
+    GET_ANALYTICS: '/api/calendar/analytics',
+},
+
 };

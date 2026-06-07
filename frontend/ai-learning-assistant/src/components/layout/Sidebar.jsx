@@ -2,6 +2,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { CalendarDays } from 'lucide-react';
 
 import {
     LayoutDashboard,
@@ -59,6 +60,8 @@ const Sidebar = ({
             icon: User,
             text: "Profile",
         },
+        { to: '/calendar', text: 'Study Calendar', icon: CalendarDays }
+        
     ];
 
     return (

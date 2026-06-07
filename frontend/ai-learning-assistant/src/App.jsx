@@ -15,6 +15,7 @@ const MeetingAssistantPage = React.lazy(() => import('./pages/MeetingAssistant/M
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import StudyVaultPage from "./pages/StudyVault/StudyVaultPage";
+import StudyCalendarPage from './pages/Calendar/StudyCalendarPage';
 
 
 const App = () => {
@@ -51,6 +52,7 @@ const App = () => {
           <Route path="/meeting-assistant" element={<MeetingAssistantPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/study-vault" element={<StudyVaultPage />} />
+          <Route path="/calendar" element={<StudyCalendarPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
