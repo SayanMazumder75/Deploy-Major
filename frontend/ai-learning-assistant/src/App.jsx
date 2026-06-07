@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+const LandingPage = React.lazy(() => import('./pages/Landing/LandingPage'));
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import NotFoundPage from './pages/Quizzes/NotFoundPage';
@@ -19,7 +20,7 @@ import StudyCalendarPage from './pages/Calendar/StudyCalendarPage';
 
 
 const App = () => {
-  const {isAuthenticated, loading} = useAuth()
+  const { loading } = useAuth()
   
   if (loading) {
     return (
@@ -33,10 +34,7 @@ const App = () => {
     <Router>
       <Suspense fallback={<div className="flex items-center justify-center h-screen"><p>Loading...</p></div>}>
       <Routes>
-        <Route
-          path="/"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
-        />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
