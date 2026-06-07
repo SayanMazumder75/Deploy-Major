@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
@@ -11,6 +11,7 @@ import FlashcardPage from './pages/Flashcards/FlashcardPage';
 import QuizTakePage from './pages/Quizzes/QuizTakePage';
 import QuizResultPage from './pages/Quizzes/QuizResultPage';
 import ProfilePage from './pages/Profile/ProfilePage';
+const MeetingAssistantPage = React.lazy(() => import('./pages/MeetingAssistant/MeetingAssistantPage'));
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import StudyVaultPage from "./pages/StudyVault/StudyVaultPage";
@@ -29,6 +30,7 @@ const App = () => {
 
   return (
     <Router>
+      <Suspense fallback={<div className="flex items-center justify-center h-screen"><p>Loading...</p></div>}>
       <Routes>
         <Route
           path="/"
@@ -46,12 +48,14 @@ const App = () => {
           <Route path="/documents/:id/flashcards" element={<FlashcardPage />} />
           <Route path="/quizzes/:quizId" element={<QuizTakePage />} />
           <Route path="/quizzes/:quizId/results" element={<QuizResultPage />} />
+          <Route path="/meeting-assistant" element={<MeetingAssistantPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/study-vault" element={<StudyVaultPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
     </Router>
   );
 }

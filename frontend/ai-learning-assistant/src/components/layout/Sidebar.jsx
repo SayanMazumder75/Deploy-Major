@@ -11,6 +11,7 @@ import {
     BookOpen,
     Brain,
     BrainCircuit,
+    Mic,
     X,
 } from "lucide-react";
 
@@ -49,6 +50,11 @@ const Sidebar = ({
             text: "Study Vault",
         },
         {
+            to: "/meeting-assistant",
+            icon: Mic,
+            text: "AI Meeting Assistant",
+        },
+        {
             to: "/profile",
             icon: User,
             text: "Profile",
@@ -68,14 +74,14 @@ const Sidebar = ({
             />
 
             <aside
-                className={`fixed top-0 left-0 h-full w-[260px] z-50 md:relative md:translate-x-0 transition-transform duration-300 ${
+                className={`fixed top-0 left-0 h-full w-65 z-50 md:relative md:translate-x-0 transition-transform duration-300 ${
                     isSidebarOpen
                         ? "translate-x-0"
                         : "-translate-x-full"
                 }`}
             >
 
-                <div className="h-full flex flex-col bg-gradient-to-b from-[#5d19c4] via-[#6b21c8] to-[#7e22ce] text-white">
+                <div className="h-full flex flex-col bg-linear-to-b from-[#5d19c4] via-[#6b21c8] to-[#7e22ce] text-white">
 
                     {/* Logo */}
                     <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
