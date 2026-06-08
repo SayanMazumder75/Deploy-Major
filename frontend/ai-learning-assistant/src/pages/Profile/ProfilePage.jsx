@@ -3,11 +3,13 @@ import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
 import Spinner from "../../components/common/Spinner";
 import authService from "../../services/authService";
+import axiosInstance from "../../utils/axiosInstance";
+import { API_PATHS } from "../../utils/apiPaths";
 import toast from "react-hot-toast";
 import {
-  User, Mail, Lock, Eye, EyeOff, Settings, X,
+  User, Mail, Settings, X,
   FileText, Brain, Trophy, Flame, MessageCircle,
-  TrendingUp, Upload, Sparkles
+  TrendingUp, Upload, Sparkles, Eye, EyeOff, Star
 } from "lucide-react";
 
 const AVATARS = [
@@ -41,16 +43,10 @@ const AVATARS = [
   },
 ];
 
-const RECENT_ACTIVITIES = [
-  { icon: Upload, label: "Uploaded Networking Notes", time: "2 hours ago", color: "text-fuchsia-600", bg: "bg-fuchsia-50" },
-  { icon: Brain, label: "Generated Flashcards", time: "5 hours ago", color: "text-purple-600", bg: "bg-purple-50" },
-  { icon: Sparkles, label: "Used AI Summary", time: "Yesterday", color: "text-pink-600", bg: "bg-pink-50" },
-  { icon: Trophy, label: "Completed a Quiz", time: "2 days ago", color: "text-fuchsia-600", bg: "bg-fuchsia-50" },
-];
-
 const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -66,29 +62,34 @@ const ProfilePage = () => {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [newEmail, setNewEmail] = useState("");
-
-  const stats = [
-    { icon: FileText, label: "Documents", value: 12, color: "text-fuchsia-600", bg: "bg-fuchsia-50", border: "border-fuchsia-200" },
-    { icon: Brain, label: "Flashcards", value: 48, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200" },
-    { icon: Trophy, label: "Quizzes Done", value: 7, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
-    { icon: Flame, label: "Day Streak", value: 12, color: "text-orange-500", bg: "bg-orange-50", border: "border-orange-200" },
-    { icon: MessageCircle, label: "AI Chats", value: 34, color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  ];
-
-  const progressItems = [
-    { label: "Documents Uploaded", value: 12, max: 20, color: "from-fuchsia-400 to-purple-500" },
-    { label: "Flashcards Studied", value: 36, max: 48, color: "from-purple-400 to-pink-500" },
-    { label: "Quizzes Completed", value: 7, max: 10, color: "from-pink-400 to-fuchsia-500" },
-    { label: "AI Features Used", value: 34, max: 50, color: "from-violet-400 to-purple-500" },
-  ];
+  const [overview, setOverview] = useState(null);
+  const [recentActivity, setRecentActivity] = useState({ documents: [], quizzes: [] });
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchAll = async () => {
       try {
-        const { data } = await authService.getProfile();
-        setUsername(data.username);
-        setEmail(data.email);
-        setNewEmail(data.email);
+        const [profileRes, dashboardRes] = await Promise.all([
+          authService.getProfile(),
+          axiosInstance.get(API_PATHS.PROGRESS.GET_DASHBOARD),
+        ]);
+
+        // Profile
+        const user = profileRes.data;
+        setUsername(user.username);
+        setEmail(user.email);
+        setNewEmail(user.email);
+        if (user.profileImage) {
+          if (user.profileImage.startsWith("avatar:")) {
+            setSelectedAvatar(parseInt(user.profileImage.split(":")[1]));
+          } else {
+            setCustomAvatar(user.profileImage);
+          }
+        }
+
+        // Dashboard
+        const dash = dashboardRes.data.data;
+        setOverview(dash.overview);
+        setRecentActivity(dash.recentActivity);
       } catch (error) {
         toast.error("Failed to fetch profile data.");
         console.error(error);
@@ -96,10 +97,10 @@ const ProfilePage = () => {
         setLoading(false);
       }
     };
-    fetchProfile();
+    fetchAll();
   }, []);
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -111,13 +112,50 @@ const ProfilePage = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setCustomAvatar(reader.result);
-      setSelectedAvatar(null);
-      setShowAvatarPicker(false);
-      toast.success("Profile photo updated!");
+    reader.onloadend = async () => {
+      const base64 = reader.result;
+      setCustomAvatar(base64);
+      try {
+        await authService.uploadAvatar(base64);
+        setSelectedAvatar(null);
+        setShowAvatarPicker(false);
+        toast.success("Profile photo updated!");
+      } catch (error) {
+        toast.error(error.message || "Failed to upload avatar.");
+        setCustomAvatar(null);
+      }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCartoonAvatarSelect = async (index) => {
+    setSelectedAvatar(index);
+    setCustomAvatar(null);
+    setShowAvatarPicker(false);
+    try {
+      await authService.updateProfile({ profileImage: `avatar:${index}` });
+      toast.success("Avatar updated!");
+    } catch (error) {
+      toast.error(error.message || "Failed to save avatar.");
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    if (!newEmail || newEmail === email) {
+      toast.error("Enter a different email address.");
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      await authService.updateEmail(newEmail);
+      setEmail(newEmail);
+      setShowEmailModal(false);
+      toast.success("Email updated!");
+    } catch (error) {
+      toast.error(error.message || "Failed to update email.");
+    } finally {
+      setEmailLoading(false);
+    }
   };
 
   const handleChangePassword = async (e) => {
@@ -145,7 +183,51 @@ const ProfilePage = () => {
     }
   };
 
+  const formatTime = (dateStr) => {
+    if (!dateStr) return "";
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    return `${mins} min${mins > 1 ? "s" : ""} ago`;
+  };
+
   if (loading) return <Spinner />;
+
+  const stats = overview ? [
+    { icon: FileText, label: "Documents", value: overview.totalDocuments, color: "text-fuchsia-600", bg: "bg-fuchsia-50", border: "border-fuchsia-200" },
+    { icon: Brain, label: "Flashcards", value: overview.totalFlashcards, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200" },
+    { icon: Trophy, label: "Quizzes Done", value: overview.completedQuizzes, color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200" },
+    { icon: Flame, label: "Day Streak", value: overview.studyStreak, color: "text-orange-500", bg: "bg-orange-50", border: "border-orange-200" },
+    { icon: Star, label: "Starred Cards", value: overview.starredFlashcards, color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
+  ] : [];
+
+  const progressItems = overview ? [
+    { label: "Documents Uploaded", value: overview.totalDocuments, max: 20, color: "from-fuchsia-400 to-purple-500" },
+    { label: "Flashcards Studied", value: overview.reviewedFlashcards, max: overview.totalFlashcards || 1, color: "from-purple-400 to-pink-500" },
+    { label: "Quizzes Completed", value: overview.completedQuizzes, max: overview.totalQuizzes || 1, color: "from-pink-400 to-fuchsia-500" },
+    { label: "Avg Quiz Score", value: overview.averageScore, max: 100, color: "from-violet-400 to-purple-500" },
+  ] : [];
+
+  // Merge doc + quiz activity, sort by date
+  const allActivity = [
+    ...recentActivity.documents.map(d => ({
+      icon: FileText,
+      label: d.title || d.fileName,
+      time: formatTime(d.lastAccessed),
+      color: "text-fuchsia-600",
+      bg: "bg-fuchsia-50",
+    })),
+    ...recentActivity.quizzes.map(q => ({
+      icon: Trophy,
+      label: `Quiz: ${q.title || q.documentId?.title || "Untitled"} — ${q.score ?? 0}/${q.totalQuestions}`,
+      time: formatTime(q.completedAt || q.createdAt),
+      color: "text-purple-600",
+      bg: "bg-purple-50",
+    })),
+  ].slice(0, 5);
 
   return (
     <div>
@@ -155,8 +237,6 @@ const ProfilePage = () => {
 
         {/* User Information Card */}
         <div className="bg-white/80 backdrop-blur-xl border-2 border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/50">
-
-          {/* Header */}
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-semibold text-slate-900">User Information</h3>
             <div className="relative">
@@ -193,21 +273,12 @@ const ProfilePage = () => {
 
           {/* Avatar + Name */}
           <div className="flex items-center gap-6 mb-6">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-fuchsia-200">
-                {customAvatar ? (
-                  <img
-                    src={customAvatar}
-                    alt="profile"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div
-                    className="w-full h-full"
-                    dangerouslySetInnerHTML={{ __html: AVATARS[selectedAvatar]?.svg }}
-                  />
-                )}
-              </div>
+            <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-fuchsia-200">
+              {customAvatar ? (
+                <img src={customAvatar} alt="profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: AVATARS[selectedAvatar]?.svg }} />
+              )}
             </div>
             <div>
               <p className="text-base font-semibold text-slate-900">{username}</p>
@@ -215,22 +286,15 @@ const ProfilePage = () => {
             </div>
           </div>
 
-          {/* Avatar Picker — only opens from settings */}
+          {/* Avatar Picker */}
           {showAvatarPicker && (
             <div className="mb-6 p-4 bg-fuchsia-50 border border-fuchsia-200 rounded-xl">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">
-                  Choose your avatar
-                </p>
-                <button
-                  onClick={() => setShowAvatarPicker(false)}
-                  className="p-1 hover:bg-fuchsia-100 rounded-lg transition"
-                >
+                <p className="text-xs font-semibold text-fuchsia-700 uppercase tracking-wide">Choose your avatar</p>
+                <button onClick={() => setShowAvatarPicker(false)} className="p-1 hover:bg-fuchsia-100 rounded-lg transition">
                   <X className="w-4 h-4 text-fuchsia-500" />
                 </button>
               </div>
-
-              {/* Upload from device */}
               <label className="flex items-center gap-3 p-3 mb-4 bg-white border-2 border-dashed border-fuchsia-300 rounded-xl cursor-pointer hover:border-fuchsia-500 hover:bg-fuchsia-50 transition-all duration-200">
                 <div className="w-10 h-10 rounded-xl bg-fuchsia-100 flex items-center justify-center shrink-0">
                   <Upload className="w-5 h-5 text-fuchsia-500" strokeWidth={2} />
@@ -239,38 +303,22 @@ const ProfilePage = () => {
                   <p className="text-sm font-semibold text-fuchsia-700">Upload from device</p>
                   <p className="text-xs text-slate-400">JPG, PNG up to 5MB</p>
                 </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                />
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
               </label>
-
-              {/* Cartoon avatars */}
               <p className="text-xs text-slate-400 mb-3">Or choose a cartoon avatar</p>
               <div className="grid grid-cols-7 gap-3">
                 {AVATARS.map((avatar, index) => (
                   <div
                     key={index}
-                    onClick={() => {
-                      setSelectedAvatar(index);
-                      setCustomAvatar(null);
-                      setShowAvatarPicker(false);
-                    }}
+                    onClick={() => handleCartoonAvatarSelect(index)}
                     className={`cursor-pointer flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all duration-200 ${
                       selectedAvatar === index && !customAvatar
                         ? 'border-fuchsia-500 bg-white'
                         : 'border-transparent hover:border-fuchsia-300 hover:bg-white'
                     }`}
                   >
-                    <div
-                      className="w-12 h-12 rounded-full overflow-hidden"
-                      dangerouslySetInnerHTML={{ __html: avatar.svg }}
-                    />
-                    <span className="text-xs text-slate-500 text-center leading-tight">
-                      {avatar.name}
-                    </span>
+                    <div className="w-12 h-12 rounded-full overflow-hidden" dangerouslySetInnerHTML={{ __html: avatar.svg }} />
+                    <span className="text-xs text-slate-500 text-center leading-tight">{avatar.name}</span>
                   </div>
                 ))}
               </div>
@@ -280,74 +328,70 @@ const ProfilePage = () => {
           {/* Username & Email */}
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">
-                Username
-              </label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">Username</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-4 w-4 text-slate-400" />
                 </div>
-                <p className="w-full h-11 pl-9 pr-3 pt-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-900">
-                  {username}
-                </p>
+                <p className="w-full h-11 pl-9 pr-3 pt-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-900">{username}</p>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">
-                Email Address
-              </label>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">Email Address</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-4 w-4 text-slate-400" />
                 </div>
-                <p className="w-full h-11 pl-9 pr-3 pt-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-900">
-                  {email}
-                </p>
+                <p className="w-full h-11 pl-9 pr-3 pt-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-900">{email}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {stats.map((stat, i) => (
-            <div key={i} className={`bg-white/80 border-2 ${stat.border} rounded-2xl p-4 text-center shadow-sm`}>
-              <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${stat.bg} mb-2`}>
-                <stat.icon className={`w-5 h-5 ${stat.color}`} strokeWidth={2} />
+        {stats.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {stats.map((stat, i) => (
+              <div key={i} className={`bg-white/80 border-2 ${stat.border} rounded-2xl p-4 text-center shadow-sm`}>
+                <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${stat.bg} mb-2`}>
+                  <stat.icon className={`w-5 h-5 ${stat.color}`} strokeWidth={2} />
+                </div>
+                <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+                <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
               </div>
-              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-              <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Study Progress */}
-        <div className="bg-white/80 backdrop-blur-xl border-2 border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/50">
-          <div className="flex items-center gap-2 mb-5">
-            <TrendingUp className="w-5 h-5 text-fuchsia-500" strokeWidth={2} />
-            <h3 className="text-lg font-semibold text-slate-900">Study Progress</h3>
-          </div>
-          <div className="space-y-4">
-            {progressItems.map((item, i) => {
-              const percent = Math.round((item.value / item.max) * 100);
-              return (
-                <div key={i}>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-sm font-medium text-slate-700">{item.label}</span>
-                    <span className="text-sm font-semibold text-fuchsia-600">{item.value}/{item.max}</span>
+        {progressItems.length > 0 && (
+          <div className="bg-white/80 backdrop-blur-xl border-2 border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/50">
+            <div className="flex items-center gap-2 mb-5">
+              <TrendingUp className="w-5 h-5 text-fuchsia-500" strokeWidth={2} />
+              <h3 className="text-lg font-semibold text-slate-900">Study Progress</h3>
+            </div>
+            <div className="space-y-4">
+              {progressItems.map((item, i) => {
+                const percent = Math.min(100, Math.round((item.value / item.max) * 100));
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-medium text-slate-700">{item.label}</span>
+                      <span className="text-sm font-semibold text-fuchsia-600">{item.value}/{item.max}</span>
+                    </div>
+                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r ${item.color} rounded-full transition-all duration-700`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">{percent}% completed</p>
                   </div>
-                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full bg-gradient-to-r ${item.color} rounded-full transition-all duration-700`}
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">{percent}% completed</p>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Recent Activity */}
         <div className="bg-white/80 backdrop-blur-xl border-2 border-slate-200 rounded-2xl p-6 shadow-lg shadow-slate-200/50">
@@ -355,20 +399,24 @@ const ProfilePage = () => {
             <Flame className="w-5 h-5 text-fuchsia-500" strokeWidth={2} />
             <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
           </div>
-          <div className="space-y-3">
-            {RECENT_ACTIVITIES.map((activity, i) => (
-              <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-fuchsia-100 bg-fuchsia-50/50">
-                <div className={`w-9 h-9 rounded-xl ${activity.bg} flex items-center justify-center shrink-0`}>
-                  <activity.icon className={`w-4 h-4 ${activity.color}`} strokeWidth={2} />
+          {allActivity.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-6">No recent activity yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {allActivity.map((activity, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-fuchsia-100 bg-fuchsia-50/50">
+                  <div className={`w-9 h-9 rounded-xl ${activity.bg} flex items-center justify-center shrink-0`}>
+                    <activity.icon className={`w-4 h-4 ${activity.color}`} strokeWidth={2} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-800">{activity.label}</p>
+                    <p className="text-xs text-slate-400">{activity.time}</p>
+                  </div>
+                  <div className="w-2 h-2 rounded-full bg-fuchsia-400" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">{activity.label}</p>
-                  <p className="text-xs text-slate-400">{activity.time}</p>
-                </div>
-                <div className="w-2 h-2 rounded-full bg-fuchsia-400" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
@@ -377,10 +425,7 @@ const ProfilePage = () => {
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md relative shadow-xl">
-            <button
-              onClick={() => setShowEmailModal(false)}
-              className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition"
-            >
+            <button onClick={() => setShowEmailModal(false)} className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-semibold mb-4">Change Email</h2>
@@ -391,15 +436,8 @@ const ProfilePage = () => {
               placeholder="Enter new email"
               className="w-full p-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400 mb-4"
             />
-            <Button
-              className="w-full"
-              onClick={() => {
-                setEmail(newEmail);
-                setShowEmailModal(false);
-                toast.success("Email updated!");
-              }}
-            >
-              Update Email
+            <Button className="w-full" onClick={handleUpdateEmail} disabled={emailLoading}>
+              {emailLoading ? "Updating..." : "Update Email"}
             </Button>
           </div>
         </div>
@@ -409,10 +447,7 @@ const ProfilePage = () => {
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md relative shadow-xl">
-            <button
-              onClick={() => setShowPasswordModal(false)}
-              className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition"
-            >
+            <button onClick={() => setShowPasswordModal(false)} className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
@@ -425,11 +460,7 @@ const ProfilePage = () => {
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrent(!showCurrent)}
-                  className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500"
-                >
+                <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
                   {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -441,11 +472,7 @@ const ProfilePage = () => {
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowNew(!showNew)}
-                  className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500"
-                >
+                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
                   {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -457,11 +484,7 @@ const ProfilePage = () => {
                   onChange={(e) => setConfirmNewPassword(e.target.value)}
                   className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500"
-                >
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
                   {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>

@@ -53,12 +53,34 @@ const changePassword = async (passwords) => {
     }
 };
 
+const updateEmail = async (email) => {
+    try {
+        const response = await axiosInstance.put(API_PATHS.AUTH.UPDATE_PROFILE, { email });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'An unknown error occurred' };
+    }
+};
+
+const uploadAvatar = async (base64Image) => {
+    try {
+        const response = await axiosInstance.put(API_PATHS.AUTH.UPDATE_PROFILE, {
+            profileImage: base64Image
+        });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || { message: 'An unknown error occurred' };
+    }
+};
+
 const authService = {
     login,
     register,
     getProfile,
     updateProfile,
     changePassword,
+    updateEmail,
+    uploadAvatar,
 };
 
 export default authService;

@@ -8,7 +8,7 @@ import AuthSaaSLayout from '../../components/auth/AuthSaaSLayout';
 const RegisterPage = () => {
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('pass');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
