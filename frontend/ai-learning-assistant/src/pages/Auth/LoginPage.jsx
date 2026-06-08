@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
-import { BrainCircuit, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AuthSaaSLayout from '../../components/auth/AuthSaaSLayout';
 
 const LoginPage = () => {
 
@@ -35,127 +36,96 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-slate-50 via-white to-slate-50">
-
-      <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] bg-size-[16px_16px] opacity-30" />
-
-      <div className="relative w-full max-w-md px-6">
-        <div className="bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-3xl shadow-xl shadow-slate-200/50 p-10">
-          
-          {/* Header */}
-          <div className="text-center mb-10">
-            {/* 🔵 Logo icon — changed from emerald to fuchsia/purple */}
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-linear-to-br from-fuchsia-400 to-purple-500 shadow-lg shadow-fuchsia-500/25 mb-6">
-              <BrainCircuit className="w-7 h-7 text-white" strokeWidth={2} />
+    <AuthSaaSLayout
+      mode="login"
+      heading="Welcome Back"
+      subtitle="Continue your AI-powered learning journey with a polished workspace built for documents, flashcards, quizzes, and focused study."
+      formEyebrow="Secure sign in"
+      formTitle="Login"
+      formSubtitle="Sign in to continue your learning workflow without breaking your focus."
+      footer={(
+        <>
+          <p className="text-center text-sm text-white/72">
+            Don't have an account?{' '}
+            <Link to="/register" className="font-semibold text-fuchsia-100 transition hover:text-white">
+              Sign up
+            </Link>
+          </p>
+          <p className="mt-4 text-center text-xs text-white/45">
+            By continuing, you agree to our Terms & Privacy Policy
+          </p>
+        </>
+      )}
+    >
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.28em] text-white/70">
+            Email
+          </label>
+          <div className="relative group">
+            <div className={`absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none transition-colors duration-200 ${focusedField === 'email' ? 'text-fuchsia-200' : 'text-white/35'}`}>
+              <Mail className="h-5 w-5" strokeWidth={2} />
             </div>
-            <h1 className="text-2xl font-medium text-slate-900 tracking-tight mb-2">
-              Welcome back
-            </h1>
-            <p className="text-slate-500 text-sm">
-              Sign in to continue your journey
-            </p>
-          </div>
-
-          {/* Form */}
-          <div className="space-y-5">
-            {/* Email Field */}
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                Email
-              </label>
-              <div className="relative group">
-                {/* 🔵 Icon focus color — changed from emerald to fuchsia */}
-                <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors duration-200 ${
-                  focusedField === 'email' ? 'text-fuchsia-500' : 'text-slate-400'
-                }`}>
-                  <Mail className="h-5 w-5" strokeWidth={2} />
-                </div>
-                {/* 🔵 Input focus border — changed from emerald to fuchsia */}
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onFocus={() => setFocusedField('email')}
-                  onBlur={() => setFocusedField(null)}
-                  className="w-full h-12 pl-12 pr-4 border-2 border-slate-200 rounded-xl bg-slate-50/50 text-slate-900 placeholder-slate-400 text-sm font-medium transition-all duration-200 focus:outline-none focus:border-fuchsia-400 focus:bg-white focus:shadow-lg focus:shadow-fuchsia-500/10"
-                  placeholder="you@example.com"
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                Password
-              </label>
-              <div className="relative group">
-                {/* 🔵 Icon focus color — changed from emerald to fuchsia */}
-                <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors duration-200 ${
-                  focusedField === 'password' ? 'text-fuchsia-500' : 'text-slate-400'
-                }`}>
-                  <Lock className="h-5 w-5" strokeWidth={2} />
-                </div>
-                {/* 🔵 Input focus border — changed from emerald to fuchsia */}
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  className="w-full h-12 pl-12 pr-4 border-2 border-slate-200 rounded-xl bg-slate-50/50 text-slate-900 placeholder-slate-400 text-sm font-medium transition-all duration-200 focus:outline-none focus:border-fuchsia-400 focus:bg-white focus:shadow-lg focus:shadow-fuchsia-500/10"
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                <p className="text-xs text-red-600 font-medium text-center">{error}</p>
-              </div>
-            )}
-
-            {/* 🔵 Submit Button — changed from emerald to fuchsia/purple */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="group relative w-full h-12 bg-linear-to-r from-fuchsia-500 to-purple-500 hover:from-fuchsia-600 hover:to-purple-600 active:scale-[0.98] text-white text-sm font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-fuchsia-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 shadow-lg shadow-fuchsia-500/25 overflow-hidden"
-            >
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    Sign in
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" strokeWidth={2.5} />
-                  </>
-                )}
-              </span>
-              <div className="absolute inset-0 bg-linear-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            </button>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-slate-200/60">
-            <p className="text-center text-sm text-slate-600">
-              Don't have an account?{' '}
-              {/* 🔵 Sign up link — changed from emerald to fuchsia */}
-              <Link to='/register' className="font-semibold text-fuchsia-600 hover:text-fuchsia-700 transition-colors duration-200">
-                Sign up
-              </Link>
-            </p>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
+              className="h-13 w-full rounded-2xl border border-white/12 bg-white/10 pl-12 pr-4 text-sm text-white placeholder:text-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition duration-200 focus:outline-none focus:border-fuchsia-200/40 focus:bg-white/14 focus:shadow-[0_0_0_4px_rgba(244,114,182,0.12)]"
+              placeholder="you@example.com"
+            />
           </div>
         </div>
 
-        {/* Subtle footer text */}
-        <p className="text-center text-xs text-slate-400 mt-6">
-          By continuing, you agree to our Terms & Privacy Policy
-        </p>
-      </div>
-    </div>
+        <div className="space-y-2">
+          <label className="block text-[11px] font-semibold uppercase tracking-[0.28em] text-white/70">
+            Password
+          </label>
+          <div className="relative group">
+            <div className={`absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none transition-colors duration-200 ${focusedField === 'password' ? 'text-fuchsia-200' : 'text-white/35'}`}>
+              <Lock className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => setFocusedField('password')}
+              onBlur={() => setFocusedField(null)}
+              className="h-13 w-full rounded-2xl border border-white/12 bg-white/10 pl-12 pr-4 text-sm text-white placeholder:text-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition duration-200 focus:outline-none focus:border-fuchsia-200/40 focus:bg-white/14 focus:shadow-[0_0_0_4px_rgba(244,114,182,0.12)]"
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="group relative mt-2 inline-flex h-13 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#f472b6,#8b5cf6)] px-5 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(168,85,247,0.3)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(168,85,247,0.38)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="relative z-10 flex items-center justify-center gap-2">
+            {loading ? (
+              <>
+                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                Sign in
+                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" strokeWidth={2.5} />
+              </>
+            )}
+          </span>
+          <div className="absolute inset-0 -translate-x-full bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.22),transparent)] transition-transform duration-700 group-hover:translate-x-full" />
+        </button>
+      </form>
+    </AuthSaaSLayout>
   );
 };
 
