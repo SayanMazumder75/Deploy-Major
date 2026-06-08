@@ -64,6 +64,8 @@ const ProfilePage = () => {
   const [newEmail, setNewEmail] = useState("");
   const [overview, setOverview] = useState(null);
   const [recentActivity, setRecentActivity] = useState({ documents: [], quizzes: [] });
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -140,23 +142,42 @@ const ProfilePage = () => {
     }
   };
 
-  const handleUpdateEmail = async () => {
-    if (!newEmail || newEmail === email) {
-      toast.error("Enter a different email address.");
-      return;
-    }
-    setEmailLoading(true);
-    try {
-      await authService.updateEmail(newEmail);
-      setEmail(newEmail);
-      setShowEmailModal(false);
-      toast.success("Email updated!");
-    } catch (error) {
-      toast.error(error.message || "Failed to update email.");
-    } finally {
-      setEmailLoading(false);
-    }
-  };
+  const handleSendOTP = async () => {
+  if (!newEmail || newEmail === email) {
+    toast.error("Enter a different email address.");
+    return;
+  }
+  setEmailLoading(true);
+  try {
+    await authService.sendEmailOTP(newEmail);
+    setOtpSent(true);
+    toast.success("Verification code sent!");
+  } catch (error) {
+    toast.error(error.error || error.message || "Failed to send OTP.");
+  } finally {
+    setEmailLoading(false);
+  }
+};
+
+const handleVerifyOTP = async () => {
+  if (!otpValue || otpValue.length !== 6) {
+    toast.error("Enter the 6-digit code.");
+    return;
+  }
+  setEmailLoading(true);
+  try {
+    await authService.verifyEmailOTP(otpValue);
+    setEmail(newEmail);
+    setShowEmailModal(false);
+    setOtpSent(false);
+    setOtpValue("");
+    toast.success("Email updated successfully!");
+  } catch (error) {
+    toast.error(error.error || error.message || "Invalid or expired code.");
+  } finally {
+    setEmailLoading(false);
+  }
+};
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -422,26 +443,63 @@ const ProfilePage = () => {
       </div>
 
       {/* Email Modal */}
-      {showEmailModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md relative shadow-xl">
-            <button onClick={() => setShowEmailModal(false)} className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition">
-              <X className="w-5 h-5" />
-            </button>
-            <h2 className="text-xl font-semibold mb-4">Change Email</h2>
-            <input
-              type="email"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="Enter new email"
-              className="w-full p-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400 mb-4"
-            />
-            <Button className="w-full" onClick={handleUpdateEmail} disabled={emailLoading}>
-              {emailLoading ? "Updating..." : "Update Email"}
-            </Button>
-          </div>
-        </div>
+{showEmailModal && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="bg-white rounded-2xl p-6 w-full max-w-md relative shadow-xl">
+      <button
+        onClick={() => {
+          setShowEmailModal(false);
+          setOtpSent(false);
+          setOtpValue("");
+          setNewEmail(email);
+        }}
+        className="absolute right-4 top-4 p-1 hover:bg-slate-100 rounded-lg transition"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <h2 className="text-xl font-semibold mb-1">Change Email</h2>
+      <p className="text-sm text-slate-400 mb-4">
+        {otpSent ? `OTP sent to ${newEmail}` : "Enter your new email address"}
+      </p>
+
+      {!otpSent ? (
+        <>
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="Enter new email"
+            className="w-full p-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400 mb-4"
+          />
+          <Button className="w-full" onClick={handleSendOTP} disabled={emailLoading}>
+            {emailLoading ? "Sending..." : "Send Verification Code"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <input
+            type="text"
+            value={otpValue}
+            onChange={(e) => setOtpValue(e.target.value)}
+            placeholder="Enter 6-digit code"
+            maxLength={6}
+            className="w-full p-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400 mb-4 text-center text-2xl tracking-widest font-bold"
+          />
+          <Button className="w-full mb-3" onClick={handleVerifyOTP} disabled={emailLoading}>
+            {emailLoading ? "Verifying..." : "Verify & Update Email"}
+          </Button>
+          <button
+            onClick={handleSendOTP}
+            className="w-full text-sm text-fuchsia-500 hover:underline"
+            disabled={emailLoading}
+          >
+            Resend code
+          </button>
+        </>
       )}
+    </div>
+  </div>
+)}
 
       {/* Password Modal */}
       {showPasswordModal && (

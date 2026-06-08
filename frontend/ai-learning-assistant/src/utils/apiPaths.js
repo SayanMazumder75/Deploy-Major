@@ -9,6 +9,8 @@ export const API_PATHS = {
         CHANGE_PASSWORD: "/api/auth/change-password",
         UPDATE_EMAIL: "/api/auth/profile",
         UPLOAD_AVATAR: "/api/auth/profile",
+        SEND_EMAIL_OTP: "/api/auth/send-email-otp",
+        VERIFY_EMAIL_OTP: "/api/auth/verify-email-otp",
     },
 
     DOCUMENTS: {

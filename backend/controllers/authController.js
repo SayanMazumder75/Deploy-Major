@@ -1,36 +1,22 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { sendOTPEmail } from "../utils/emailService.js";
 
-//Generate JWT token
+// In-memory OTP store: { email: { otp, expiry, newEmail } }
+const otpStore = {};
+
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: process.env.JWT_EXPIRE || "7d",
     });
 };
 
-//@desc Register new user
-//@route Post /api/auth/registera
-//@access Public
 export const register = async (req, res, next) => {
     try {
         const { username, email, password } = req.body;
-
-        // Check if user exists
         const userExists = await User.findOne({ $or: [{ email }] });
-
-        // if (userExists) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         error:
-        //             userExists.email === email
-        //                 ? "Email already registered"
-        //                 : "Username already taken",
-        //         statusCode: 400,
-        //     });
-        // }
         if (userExists) {
             const token = generateToken(userExists._id);
-
             return res.status(200).json({
                 success: true,
                 data: {
@@ -46,17 +32,8 @@ export const register = async (req, res, next) => {
                 message: "User already exists, logged in"
             });
         }
-
-        // Create user
-        const user = await User.create({
-            username,
-            email,
-            password,
-        });
-
-        // Generate token
+        const user = await User.create({ username, email, password });
         const token = generateToken(user._id);
-
         res.status(201).json({
             success: true,
             data: {
@@ -76,46 +53,24 @@ export const register = async (req, res, next) => {
     }
 };
 
-//@desc     Login user
-//@router   POST/api/auth/login
-//@access   public
 export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
-
-        // Validate input
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
                 error: "Please provide email and password",
-                statusCode: 400,
             });
         }
-        // Check for user (include password for comparison)
         const user = await User.findOne({ email }).select("+password");
-
         if (!user) {
-            return res.status(401).json({
-                success: false,
-                error: "Invalid credentials",
-                statusCode: 401,
-            });
+            return res.status(401).json({ success: false, error: "Invalid credentials" });
         }
-
-        // Check password
         const isMatch = await user.matchPassword(password);
-
         if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                error: "Invalid credentials",
-                statusCode: 401,
-            });
+            return res.status(401).json({ success: false, error: "Invalid credentials" });
         }
-
-        // Generate token
         const token = generateToken(user._id);
-
         res.status(200).json({
             success: true,
             user: {
@@ -127,20 +82,14 @@ export const login = async (req, res, next) => {
             token,
             message: "Login successful",
         });
-
-
     } catch (error) {
         next(error);
     }
 };
 
-//@desc    Get user profile
-//@route   GET /api/auth/profile
-//@access  Private
 export const getProfile = async (req, res, next) => {
     try {
         const user = await User.findById(req.user._id);
-
         res.status(200).json({
             success: true,
             data: {
@@ -157,21 +106,14 @@ export const getProfile = async (req, res, next) => {
     }
 };
 
-//@desc    Update user profile
-//@route   PUT /api/auth/profile
-//@access  Private
 export const updateProfile = async (req, res, next) => {
     try {
         const { username, email, profileImage } = req.body;
-
         const user = await User.findById(req.user._id);
-
         if (username) user.username = username;
         if (email) user.email = email;
         if (profileImage) user.profileImage = profileImage;
-
         await user.save();
-
         res.status(200).json({
             success: true,
             data: {
@@ -187,46 +129,86 @@ export const updateProfile = async (req, res, next) => {
     }
 };
 
-//@desc    Change password
-//@route   POST /api/auth/chnage-password
-//@access  Private
 export const changePassword = async (req, res, next) => {
     try {
         const { currentPassword, newPassword } = req.body;
-
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({
-                success: false,
-                error: "Please provide current and new password",
-                statusCode: 400,
-            });
+            return res.status(400).json({ success: false, error: "Please provide current and new password" });
         }
-
         const user = await User.findById(req.user._id).select("+password");
-
-        // Check current password
         const isMatch = await user.matchPassword(currentPassword);
-
         if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                error: "Current password is incorrect",
-                statusCode: 401,
-            });
+            return res.status(401).json({ success: false, error: "Current password is incorrect" });
         }
-
-        // Update password
         user.password = newPassword;
         await user.save();
-
-        res.status(200).json({
-            success: true,
-            message: "Password changed successfully",
-        });
-
+        res.status(200).json({ success: true, message: "Password changed successfully" });
     } catch (error) {
         next(error);
     }
 };
 
+// @desc   Send OTP to new email
+// @route  POST /api/auth/send-email-otp
+// @access Private
+export const sendEmailOTP = async (req, res, next) => {
+    try {
+        const { newEmail } = req.body;
+        if (!newEmail) {
+            return res.status(400).json({ success: false, error: "Please provide new email" });
+        }
 
+        // Check if email already taken
+        const existing = await User.findOne({ email: newEmail });
+        if (existing) {
+            return res.status(400).json({ success: false, error: "Email already in use" });
+        }
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        // Store OTP
+        otpStore[req.user._id.toString()] = { otp, expiry, newEmail };
+
+        // Send email
+        await sendOTPEmail(newEmail, otp);
+
+        res.status(200).json({ success: true, message: "OTP sent to new email" });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc   Verify OTP and update email
+// @route  POST /api/auth/verify-email-otp
+// @access Private
+export const verifyEmailOTP = async (req, res, next) => {
+    try {
+        const { otp } = req.body;
+        const userId = req.user._id.toString();
+        const record = otpStore[userId];
+
+        if (!record) {
+            return res.status(400).json({ success: false, error: "No OTP requested. Please request a new one." });
+        }
+        if (Date.now() > record.expiry) {
+            delete otpStore[userId];
+            return res.status(400).json({ success: false, error: "OTP expired. Please request a new one." });
+        }
+        if (record.otp !== otp) {
+            return res.status(400).json({ success: false, error: "Invalid OTP." });
+        }
+
+        // Update email
+        const user = await User.findById(userId);
+        user.email = record.newEmail;
+        await user.save();
+
+        delete otpStore[userId];
+
+        res.status(200).json({ success: true, message: "Email updated successfully", data: { email: user.email } });
+    } catch (error) {
+        next(error);
+    }
+};
