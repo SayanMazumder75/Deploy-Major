@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 const LoginPage = () => {
 
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('pass');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
