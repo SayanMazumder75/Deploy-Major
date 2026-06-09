@@ -66,6 +66,8 @@ const ProfilePage = () => {
   const [recentActivity, setRecentActivity] = useState({ documents: [], quizzes: [] });
   const [otpSent, setOtpSent] = useState(false);
   const [otpValue, setOtpValue] = useState("");
+  const [passwordOtpSent, setPasswordOtpSent] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState("");
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -179,30 +181,93 @@ const handleVerifyOTP = async () => {
   }
 };
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    if (newPassword !== confirmNewPassword) {
-      toast.error("New passwords do not match.");
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters long.");
-      return;
-    }
-    setPasswordLoading(true);
-    try {
-      await authService.changePassword({ currentPassword, newPassword });
-      toast.success("Password changed successfully!");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setShowPasswordModal(false);
-    } catch (error) {
-      toast.error(error.message || "Failed to change password.");
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
+  const handleSendPasswordOTP = async () => {
+  if (
+    !currentPassword ||
+    !newPassword ||
+    !confirmNewPassword
+  ) {
+    toast.error("Please fill all fields.");
+    return;
+  }
+
+  if (newPassword !== confirmNewPassword) {
+    toast.error("Passwords do not match.");
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    toast.error(
+      "Password must be at least 6 characters."
+    );
+    return;
+  }
+
+  setPasswordLoading(true);
+
+  try {
+    await authService.sendPasswordOTP(
+      currentPassword
+    );
+
+    setPasswordOtpSent(true);
+
+    toast.success(
+      "Verification code sent to your email!"
+    );
+  } catch (error) {
+    toast.error(
+      error.error ||
+      error.message ||
+      "Failed to send OTP."
+    );
+  } finally {
+    setPasswordLoading(false);
+  }
+};
+
+const handleVerifyPasswordOTP = async () => {
+
+  if (passwordOtp.length !== 6) {
+    toast.error("Enter valid OTP.");
+    return;
+  }
+
+  setPasswordLoading(true);
+
+  try {
+
+    await authService.verifyPasswordOTP(
+      passwordOtp,
+      newPassword
+    );
+
+    toast.success(
+      "Password changed successfully!"
+    );
+
+    setShowPasswordModal(false);
+
+    setNewPassword("");
+    setConfirmNewPassword("");
+
+    setPasswordOtp("");
+
+    setPasswordOtpSent(false);
+
+  } catch (error) {
+
+    toast.error(
+      error.error ||
+      error.message ||
+      "Invalid OTP."
+    );
+
+  } finally {
+
+    setPasswordLoading(false);
+  }
+};
 
   const formatTime = (dateStr) => {
     if (!dateStr) return "";
@@ -509,47 +574,141 @@ const handleVerifyOTP = async () => {
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div className="relative">
-                <input
-                  type={showCurrent ? "text" : "password"}
-                  placeholder="Current Password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
-                />
-                <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
-                  {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  type={showNew ? "text" : "password"}
-                  placeholder="New Password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
-                />
-                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
-                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  placeholder="Confirm New Password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-fuchsia-400"
-                />
-                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-3.5 text-slate-400 hover:text-fuchsia-500">
-                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <Button type="submit" disabled={passwordLoading} className="w-full">
-                {passwordLoading ? "Changing..." : "Update Password"}
-              </Button>
-            </form>
+            <div className="space-y-4">
+
+  {!passwordOtpSent ? (
+    <>
+    <div className="relative">
+  <input
+    type={
+      showCurrent
+        ? "text"
+        : "password"
+    }
+    placeholder="Current Password"
+    value={currentPassword}
+    onChange={(e) =>
+      setCurrentPassword(
+        e.target.value
+      )
+    }
+    className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl"
+  />
+
+  <button
+    type="button"
+    onClick={() =>
+      setShowCurrent(
+        !showCurrent
+      )
+    }
+    className="absolute right-3 top-3.5"
+  >
+    {showCurrent ? (
+      <EyeOff className="w-4 h-4" />
+    ) : (
+      <Eye className="w-4 h-4" />
+    )}
+  </button>
+</div>
+      <div className="relative">
+        <input
+          type={showNew ? "text" : "password"}
+          placeholder="New Password"
+          value={newPassword}
+          onChange={(e) =>
+            setNewPassword(e.target.value)
+          }
+          className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl"
+        />
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowNew(!showNew)
+          }
+          className="absolute right-3 top-3"
+        >
+          {showNew ?
+            <EyeOff className="w-4 h-4" /> :
+            <Eye className="w-4 h-4" />
+          }
+        </button>
+      </div>
+
+      <div className="relative">
+        <input
+          type={
+            showConfirm ?
+            "text" :
+            "password"
+          }
+          placeholder="Confirm Password"
+          value={confirmNewPassword}
+          onChange={(e) =>
+            setConfirmNewPassword(
+              e.target.value
+            )
+          }
+          className="w-full p-3 pr-10 border-2 border-slate-200 rounded-xl"
+        />
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowConfirm(
+              !showConfirm
+            )
+          }
+          className="absolute right-3 top-3"
+        >
+          {showConfirm ?
+            <EyeOff className="w-4 h-4" /> :
+            <Eye className="w-4 h-4" />
+          }
+        </button>
+      </div>
+
+      <Button
+        className="w-full"
+        onClick={handleSendPasswordOTP}
+        disabled={passwordLoading}
+      >
+        {passwordLoading
+          ? "Sending..."
+          : "Send Verification Code"}
+      </Button>
+    </>
+  ) : (
+    <>
+      <input
+        type="text"
+        value={passwordOtp}
+        onChange={(e) =>
+          setPasswordOtp(
+            e.target.value
+          )
+        }
+        maxLength={6}
+        placeholder="Enter OTP"
+        className="w-full p-3 border-2 border-slate-200 rounded-xl text-center text-2xl tracking-widest"
+      />
+
+      <Button
+        className="w-full"
+        onClick={
+          handleVerifyPasswordOTP
+        }
+        disabled={passwordLoading}
+      >
+        {passwordLoading
+          ? "Verifying..."
+          : "Verify & Change Password"}
+      </Button>
+    </>
+  )}
+
+</div>
           </div>
         </div>
       )}

@@ -11,6 +11,8 @@ export const API_PATHS = {
         UPLOAD_AVATAR: "/api/auth/profile",
         SEND_EMAIL_OTP: "/api/auth/send-email-otp",
         VERIFY_EMAIL_OTP: "/api/auth/verify-email-otp",
+        SEND_PASSWORD_OTP: '/api/auth/send-password-otp',
+        VERIFY_PASSWORD_OTP: '/api/auth/verify-password-otp',
     },
 
     DOCUMENTS: {

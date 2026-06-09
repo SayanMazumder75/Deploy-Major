@@ -20,7 +20,9 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Please provide a password'],
         minlength: [6, 'Password must be at least 6 characters long'],
-        select: false
+        select: false,
+        passwordResetOTP: String,
+        passwordResetOTPExpires: Date,
     },
     profileImage: {
         type: String,

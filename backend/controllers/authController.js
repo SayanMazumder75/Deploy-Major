@@ -4,6 +4,7 @@ import { sendOTPEmail } from "../utils/emailService.js";
 
 // In-memory OTP store: { email: { otp, expiry, newEmail } }
 const otpStore = {};
+const passwordOtpStore = {};
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -212,3 +213,113 @@ export const verifyEmailOTP = async (req, res, next) => {
         next(error);
     }
 };
+
+// @desc   Send OTP to current email for password change
+// @route  POST /api/auth/send-password-otp
+// @access Private
+export const sendPasswordOTP = async (req, res, next) => {
+    try {
+        const { currentPassword } = req.body;
+
+const user = await User.findById(
+  req.user._id
+).select("+password");
+
+const isMatch =
+  await user.matchPassword(
+    currentPassword
+  );
+
+if (!isMatch) {
+  return res.status(400).json({
+    success: false,
+    error:
+      "Current password is incorrect",
+  });
+}
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found",
+            });
+        }
+
+        // Generate OTP
+        const otp = Math.floor(
+            100000 + Math.random() * 900000
+        ).toString();
+
+        const expiry = Date.now() + 10 * 60 * 1000;
+
+        passwordOtpStore[req.user._id.toString()] = {
+            otp,
+            expiry,
+        };
+
+        // Send OTP to current email
+        await sendOTPEmail(user.email, otp);
+
+        res.status(200).json({
+            success: true,
+            message: "OTP sent to your email",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc   Verify OTP and change password
+// @route  POST /api/auth/verify-password-otp
+// @access Private
+export const verifyPasswordOTP = async (req, res, next) => {
+    try {
+
+        const { otp, newPassword } = req.body;
+
+        const userId = req.user._id.toString();
+
+        const record = passwordOtpStore[userId];
+
+        if (!record) {
+            return res.status(400).json({
+                success: false,
+                error: "No OTP requested",
+            });
+        }
+
+        if (Date.now() > record.expiry) {
+            delete passwordOtpStore[userId];
+
+            return res.status(400).json({
+                success: false,
+                error: "OTP expired",
+            });
+        }
+
+        if (record.otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid OTP",
+            });
+        }
+
+        const user = await User.findById(userId);
+
+        user.password = newPassword;
+
+        await user.save();
+
+        delete passwordOtpStore[userId];
+
+        res.status(200).json({
+            success: true,
+            message: "Password changed successfully",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+

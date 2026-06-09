@@ -109,6 +109,50 @@ const verifyEmailOTP = async (otp) => {
     }
 };
 
+const sendPasswordOTP = async (
+  currentPassword
+) => {
+  try {
+    const response =
+      await axiosInstance.post(
+        API_PATHS.AUTH.SEND_PASSWORD_OTP,
+        {
+          currentPassword,
+        }
+      );
+
+    return response.data;
+  } catch (error) {
+    throw (
+      error.response?.data || {
+        message:
+          "An unknown error occurred",
+      }
+    );
+  }
+};
+
+const verifyPasswordOTP = async (
+    otp,
+    newPassword
+) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AUTH.VERIFY_PASSWORD_OTP,
+            {
+                otp,
+                newPassword,
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
+    }
+};
+
 const authService = {
     login,
     register,
@@ -119,6 +163,8 @@ const authService = {
     uploadAvatar,
     sendEmailOTP,
     verifyEmailOTP,
+    sendPasswordOTP,
+    verifyPasswordOTP,
 };
 
 export default authService;

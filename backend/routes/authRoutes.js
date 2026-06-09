@@ -8,6 +8,8 @@ import {
     changePassword,
     sendEmailOTP,
     verifyEmailOTP,
+    sendPasswordOTP,
+    verifyPasswordOTP,
 } from '../controllers/authController.js';
 import protect from '../middleware/auth.js';
 
@@ -32,5 +34,16 @@ router.put('/profile', protect, updateProfile);
 router.post('/change-password', protect, changePassword);
 router.post('/send-email-otp', protect, sendEmailOTP);
 router.post('/verify-email-otp', protect, verifyEmailOTP);
+router.post(
+    "/send-password-otp",
+    protect,
+    sendPasswordOTP
+);
+
+router.post(
+    "/verify-password-otp",
+    protect,
+    verifyPasswordOTP
+);
 
 export default router;
