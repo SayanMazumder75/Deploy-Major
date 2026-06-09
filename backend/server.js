@@ -52,6 +52,8 @@ app.use('/api/flashcards', flashcardRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/quizzes', quizRoutes)
 app.use('/api/progress', progressRoutes)
+app.use('/api/calendar', calendarRoutes);
+
 
 
 app.use(errorHandler);
@@ -65,7 +67,6 @@ app.use((req, res) =>{
     });
 });
 
-app.use('/api/calendar', calendarRoutes);
 
 
 //Start server
