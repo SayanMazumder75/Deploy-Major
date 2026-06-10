@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { useTheme } from "../../context/ThemeContext.jsx";
 import {
     Bell, Search, BrainCircuit, LayoutDashboard, FileText,
     BookOpen, Brain, User, LogOut, ChevronDown,
     Mic, CalendarDays, Sparkles, X, Menu,
-    Zap, ArrowRight, Clock, Hash,
+    Zap, ArrowRight, Clock, Hash, Sun, Moon,
 } from "lucide-react";
 
 // ─── hooks ─────────────────────────────────────────────────────────────────────
@@ -168,13 +169,10 @@ const SearchModal = ({ onClose }) => {
                     overflow: "hidden",
                 }}
             >
-                {/* top gradient line */}
                 <div style={{
                     height: 1,
                     background: "linear-gradient(90deg, transparent, rgba(168,85,247,0.8), rgba(236,72,153,0.6), transparent)",
                 }} />
-
-                {/* search row */}
                 <div style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "16px 20px",
@@ -208,8 +206,6 @@ const SearchModal = ({ onClose }) => {
                         fontFamily: "monospace", cursor: "pointer", letterSpacing: "0.04em",
                     }}>ESC</kbd>
                 </div>
-
-                {/* recent + categories */}
                 <div style={{ padding: "12px 12px 8px" }}>
                     {!q && (
                         <>
@@ -280,8 +276,6 @@ const SearchModal = ({ onClose }) => {
                         );
                     })}
                 </div>
-
-                {/* footer */}
                 <div style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
                     padding: "10px 20px 14px",
@@ -333,8 +327,6 @@ const NotificationPanel = ({ onClose }) => {
             }}
         >
             <div style={{ height: 1, background: "linear-gradient(90deg,transparent,rgba(168,85,247,0.7),rgba(236,72,153,0.5),transparent)" }} />
-
-            {/* header */}
             <div style={{
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 padding: "14px 16px 12px",
@@ -374,8 +366,6 @@ const NotificationPanel = ({ onClose }) => {
                     </button>
                 </div>
             </div>
-
-            {/* list */}
             <div style={{ padding: "6px 8px 8px", maxHeight: 340, overflowY: "auto" }}>
                 {items.map((n) => (
                     <motion.div
@@ -418,8 +408,6 @@ const NotificationPanel = ({ onClose }) => {
                     </motion.div>
                 ))}
             </div>
-
-            {/* footer */}
             <div style={{
                 borderTop: "1px solid rgba(255,255,255,0.05)",
                 padding: "10px 16px",
@@ -461,8 +449,6 @@ const ProfileDropdown = ({ user, initials, onLogout, onClose }) => {
             }}
         >
             <div style={{ height: 1, background: "linear-gradient(90deg,transparent,rgba(168,85,247,0.7),rgba(236,72,153,0.5),transparent)" }} />
-
-            {/* user card */}
             <div style={{
                 padding: "14px 14px 12px",
                 borderBottom: "1px solid rgba(255,255,255,0.06)",
@@ -496,8 +482,6 @@ const ProfileDropdown = ({ user, initials, onLogout, onClose }) => {
                     }}>{user?.email || "user@example.com"}</p>
                 </div>
             </div>
-
-            {/* Profile + Study Calendar only */}
             <div style={{ padding: "8px 8px 6px" }}>
                 {PROFILE_MENU.map((item) => {
                     const Icon = item.icon;
@@ -529,8 +513,6 @@ const ProfileDropdown = ({ user, initials, onLogout, onClose }) => {
                     );
                 })}
             </div>
-
-            {/* sign out */}
             <div style={{ padding: "4px 8px 10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                 <motion.button
                     whileHover={{ x: 2, background: "rgba(252,165,165,0.07)" }}
@@ -593,11 +575,7 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                     overflowY: "auto",
                 }}
             >
-                {/* top */}
-                <div style={{
-                    height: 1,
-                    background: "linear-gradient(90deg,transparent,rgba(168,85,247,0.7),rgba(236,72,153,0.5),transparent)",
-                }} />
+                <div style={{ height: 1, background: "linear-gradient(90deg,transparent,rgba(168,85,247,0.7),rgba(236,72,153,0.5),transparent)" }} />
                 <div style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
                     padding: "16px 18px",
@@ -622,8 +600,6 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                         <X size={16} />
                     </button>
                 </div>
-
-                {/* nav */}
                 <div style={{ padding: "12px 10px" }}>
                     <p style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: "4px 8px 10px", fontFamily: "'DM Sans', sans-serif" }}>Navigation</p>
                     {NAV_LINKS.map(link => {
@@ -652,10 +628,7 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                         );
                     })}
                 </div>
-
                 <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
-
-                {/* tools */}
                 <div style={{ padding: "12px 10px" }}>
                     <p style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: "4px 8px 10px", fontFamily: "'DM Sans', sans-serif" }}>Tools & Account</p>
                     {PROFILE_MENU.map(item => {
@@ -680,10 +653,7 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                         );
                     })}
                 </div>
-
                 <div style={{ flex: 1 }} />
-
-                {/* user + logout */}
                 <div style={{ padding: "12px 10px 20px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <div style={{
                         display: "flex", alignItems: "center", gap: 10,
@@ -729,6 +699,7 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
 // ─── Header ───────────────────────────────────────────────────────────────────
 const Header = ({ toggleSidebar }) => {
     const { user, logout } = useAuth();
+    const { isDark, toggleTheme } = useTheme();
     const navigate = useNavigate();
     const { isMobile, isTablet } = useBreakpoint();
 
@@ -770,7 +741,6 @@ const Header = ({ toggleSidebar }) => {
                 borderBottom: "1px solid rgba(255,255,255,0.07)",
                 boxShadow: "0 1px 0 rgba(255,255,255,0.04), 0 12px 48px rgba(0,0,0,0.3)",
             }}>
-                {/* prismatic top line */}
                 <div style={{
                     position: "absolute", top: 0, left: 0, right: 0, height: 1,
                     background: "linear-gradient(90deg, transparent 0%, rgba(168,85,247,0.9) 25%, rgba(236,72,153,0.7) 60%, rgba(99,102,241,0.6) 85%, transparent 100%)",
@@ -788,7 +758,6 @@ const Header = ({ toggleSidebar }) => {
 
                     {/* ── LEFT ── */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                        {/* logo */}
                         <motion.div
                             whileHover={{ opacity: 0.9 }}
                             whileTap={{ scale: 0.97 }}
@@ -820,7 +789,6 @@ const Header = ({ toggleSidebar }) => {
                             )}
                         </motion.div>
 
-                        {/* workspace label — desktop */}
                         {!isTablet && (
                             <>
                                 <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.09)" }} />
@@ -858,7 +826,7 @@ const Header = ({ toggleSidebar }) => {
                     {/* ── RIGHT ── */}
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
 
-                        {/* search — desktop pill, mobile icon */}
+                        {/* search */}
                         {!isMobile ? (
                             <motion.button
                                 whileHover={{ borderColor: "rgba(168,85,247,0.35)", background: "rgba(255,255,255,0.07)" }}
@@ -890,6 +858,14 @@ const Header = ({ toggleSidebar }) => {
                                 <Search size={16} />
                             </IconButton>
                         )}
+
+                        {/* ── THEME TOGGLE ── */}
+                        <IconButton onClick={toggleTheme} title={isDark ? "Light mode" : "Dark mode"}>
+                            {isDark
+                                ? <Sun size={16} strokeWidth={1.8} color="#fbbf24" />
+                                : <Moon size={16} strokeWidth={1.8} color="rgba(255,255,255,0.7)" />
+                            }
+                        </IconButton>
 
                         {/* notification bell */}
                         <div ref={notifRef} style={{ position: "relative" }}>
@@ -937,10 +913,7 @@ const Header = ({ toggleSidebar }) => {
                                         textOverflow: "ellipsis", whiteSpace: "nowrap",
                                     }}>{user?.username || "User"}</span>
                                 )}
-                                <motion.div
-                                    animate={{ rotate: profileOpen ? 180 : 0 }}
-                                    transition={{ duration: 0.2 }}
-                                >
+                                <motion.div animate={{ rotate: profileOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
                                     <ChevronDown size={12} color="rgba(255,255,255,0.35)" />
                                 </motion.div>
                             </motion.button>
@@ -963,7 +936,7 @@ const Header = ({ toggleSidebar }) => {
                             </IconButton>
                         )}
 
-                        {/* tablet hamburger (for sidebar) */}
+                        {/* tablet hamburger */}
                         {isTablet && !isMobile && (
                             <IconButton onClick={toggleSidebar} title="Sidebar">
                                 <Menu size={17} />
