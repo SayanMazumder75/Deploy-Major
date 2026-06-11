@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Spinner from "../../components/common/Spinner";
 import { Mic, Sparkles, Languages, BrainCircuit, FileText, ChevronDown, ChevronUp } from "lucide-react";
@@ -24,8 +24,13 @@ const PLATFORMS = [
   { icon: "📚", title: "Smart Learning",  desc: "Convert sessions into transcripts, summaries, and revision material." },
 ];
 
-// ─── localStorage key ─────────────────────────────────────────────────────────
+// ─── constants ────────────────────────────────────────────────────────────────
 const LS_KEY = "meetmind_guide_closed";
+
+// ⚠️ SET THIS to your exact Speech App domain (no trailing slash)
+// Must match VITE_MEETMIND_ORIGIN in Speech App's .env
+const SPEECH_APP_ORIGIN = import.meta.env.VITE_SPEECH_APP_ORIGIN || "https://speechtotext-sepia-nine.vercel.app";
+const SPEECH_APP_URL = "https://speechtotext-sepia-nine.vercel.app/";
 
 // ─── step card ─────────────────────────────────────────────────────────────────
 const StepCard = ({ s }) => (
@@ -150,6 +155,7 @@ const OnboardingContent = () => (
 // ─── page ──────────────────────────────────────────────────────────────────────
 const MeetingAssistantPage = () => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const iframeRef = useRef(null);
 
   // first visit → expanded; subsequent → collapsed (remembered via localStorage)
   const [guideOpen, setGuideOpen] = useState(() => {
@@ -165,6 +171,49 @@ const MeetingAssistantPage = () => {
       else localStorage.removeItem(LS_KEY);
     } catch {}
   };
+
+  /**
+   * Send JWT to Speech App iframe via postMessage (SSO bridge).
+   * Fires after iframe finishes loading.
+   * Token is read from MeetMind's localStorage (set on login/register).
+   * Targeted to exact SPEECH_APP_ORIGIN — never uses "*".
+   */
+  const handleIframeLoad = () => {
+    setIframeLoaded(true);
+
+    try {
+      const token = localStorage.getItem("token"); // MeetMind JWT key
+      if (token && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          { type: "MEETMIND_AUTH", token },
+          SPEECH_APP_ORIGIN // ← strict origin, NOT "*"
+        );
+        console.log("[MeetMind] JWT sent to Speech App iframe.");
+      } else {
+        console.warn("[MeetMind] No token found in localStorage — user may not be logged in.");
+      }
+    } catch (err) {
+      console.error("[MeetMind] postMessage failed:", err);
+    }
+  };
+
+  /**
+   * Re-send token if iframe ref is available but iframe was already loaded
+   * before ref was attached (edge case with hot reload / strict mode).
+   */
+  useEffect(() => {
+    if (iframeLoaded && iframeRef.current?.contentWindow) {
+      try {
+        const token = localStorage.getItem("token");
+        if (token) {
+          iframeRef.current.contentWindow.postMessage(
+            { type: "MEETMIND_AUTH", token },
+            SPEECH_APP_ORIGIN
+          );
+        }
+      } catch {}
+    }
+  }, [iframeLoaded]);
 
   return (
     <div className="min-h-full w-full px-0 pb-2 md:pb-0">
@@ -254,7 +303,6 @@ const MeetingAssistantPage = () => {
             transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
             style={{ overflow: "hidden" }}
           >
-            {/* inner padding so content doesn't clip during animation */}
             <div style={{ paddingTop: 24, paddingBottom: 4 }}>
               <OnboardingContent />
             </div>
@@ -262,7 +310,7 @@ const MeetingAssistantPage = () => {
         )}
       </AnimatePresence>
 
-      {/* ── IFRAME — unchanged ── */}
+      {/* ── IFRAME ── */}
       <div className="mt-6 rounded-[28px] border border-purple-100 bg-white/70 p-3 shadow-2xl shadow-purple-100/60 backdrop-blur-xl md:p-4">
         <div className="relative overflow-hidden rounded-[20px] bg-slate-100">
           {!iframeLoaded && (
@@ -274,10 +322,11 @@ const MeetingAssistantPage = () => {
             </div>
           )}
           <iframe
+            ref={iframeRef}
             title="AI Meeting Assistant"
-            src="https://speechtotext-sepia-nine.vercel.app/"
+            src={SPEECH_APP_URL}
             className="h-[calc(100vh-14rem)] min-h-160 w-full rounded-[20px] border-0 bg-white md:h-[calc(100vh-12rem)]"
-            onLoad={() => setIframeLoaded(true)}
+            onLoad={handleIframeLoad}
             loading="eager"
             allow="microphone; clipboard-read; clipboard-write; display-capture"
           />
