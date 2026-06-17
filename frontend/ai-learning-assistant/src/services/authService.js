@@ -9,7 +9,9 @@ const login = async (email, password) => {
         });
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -22,16 +24,22 @@ const register = async (username, email, password) => {
         });
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
 const getProfile = async () => {
     try {
-        const response = await axiosInstance.get(API_PATHS.AUTH.GET_PROFILE);
+        const response = await axiosInstance.get(
+            API_PATHS.AUTH.GET_PROFILE
+        );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -43,7 +51,9 @@ const updateProfile = async (userData) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -55,7 +65,9 @@ const changePassword = async (passwords) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -67,7 +79,9 @@ const updateEmail = async (email) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -81,7 +95,9 @@ const uploadAvatar = async (base64Image) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -93,7 +109,9 @@ const sendEmailOTP = async (newEmail) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
@@ -105,37 +123,30 @@ const verifyEmailOTP = async (otp) => {
         );
         return response.data;
     } catch (error) {
-        throw error.response?.data || { message: "An unknown error occurred" };
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
     }
 };
 
-const sendPasswordOTP = async (
-  currentPassword
-) => {
-  try {
-    const response =
-      await axiosInstance.post(
-        API_PATHS.AUTH.SEND_PASSWORD_OTP,
-        {
-          currentPassword,
-        }
-      );
+const sendPasswordOTP = async (currentPassword) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AUTH.SEND_PASSWORD_OTP,
+            {
+                currentPassword,
+            }
+        );
 
-    return response.data;
-  } catch (error) {
-    throw (
-      error.response?.data || {
-        message:
-          "An unknown error occurred",
-      }
-    );
-  }
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
+    }
 };
 
-const verifyPasswordOTP = async (
-    otp,
-    newPassword
-) => {
+const verifyPasswordOTP = async (otp, newPassword) => {
     try {
         const response = await axiosInstance.post(
             API_PATHS.AUTH.VERIFY_PASSWORD_OTP,
@@ -153,6 +164,48 @@ const verifyPasswordOTP = async (
     }
 };
 
+/* ===== FORGOT PASSWORD ===== */
+
+const forgotPassword = async (email) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AUTH.FORGOT_PASSWORD,
+            { email }
+        );
+
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
+    }
+};
+
+const resetPassword = async (
+    email,
+    otp,
+    newPassword
+) => {
+    try {
+        const response = await axiosInstance.post(
+            API_PATHS.AUTH.RESET_PASSWORD,
+            {
+                email,
+                otp,
+                newPassword,
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        throw error.response?.data || {
+            message: "An unknown error occurred",
+        };
+    }
+};
+
+/* ===== EXPORT ===== */
+
 const authService = {
     login,
     register,
@@ -165,6 +218,8 @@ const authService = {
     verifyEmailOTP,
     sendPasswordOTP,
     verifyPasswordOTP,
+    forgotPassword,
+    resetPassword,
 };
 
 export default authService;

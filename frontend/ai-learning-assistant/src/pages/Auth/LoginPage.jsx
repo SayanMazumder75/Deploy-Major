@@ -97,6 +97,15 @@ const LoginPage = () => {
             />
           </div>
         </div>
+        {/* Forgot Password Link */}
+<div className="flex justify-end -mt-2">
+  <Link
+    to="/forgot-password"
+    className="text-xs font-medium text-fuchsia-200/80 transition hover:text-white"
+  >
+    Forgot password?
+  </Link>
+</div>
 
         {error && (
           <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">

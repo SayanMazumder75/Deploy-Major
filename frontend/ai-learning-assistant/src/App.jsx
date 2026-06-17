@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 const LandingPage = React.lazy(() => import('./pages/Landing/LandingPage'));
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
+import ForgotPasswordPage from './pages/Auth/ForgotPasswordPage';
 import NotFoundPage from './pages/Quizzes/NotFoundPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import DocumentListPage from './pages/Documents/DocumentListPage';
@@ -37,6 +38,7 @@ const App = () => {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* protected Routes */}
         <Route element={<ProtectedRoute />}>
@@ -60,5 +62,4 @@ const App = () => {
   );
 }
 
-export default App
-
+export default App;

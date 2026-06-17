@@ -10,6 +10,8 @@ import {
     verifyEmailOTP,
     sendPasswordOTP,
     verifyPasswordOTP,
+    forgotPassword,  
+    resetPassword, 
 } from '../controllers/authController.js';
 import protect from '../middleware/auth.js';
 
@@ -45,5 +47,7 @@ router.post(
     protect,
     verifyPasswordOTP
 );
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 export default router;

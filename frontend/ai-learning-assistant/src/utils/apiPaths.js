@@ -13,6 +13,8 @@ export const API_PATHS = {
         VERIFY_EMAIL_OTP: "/api/auth/verify-email-otp",
         SEND_PASSWORD_OTP: '/api/auth/send-password-otp',
         VERIFY_PASSWORD_OTP: '/api/auth/verify-password-otp',
+         FORGOT_PASSWORD: "/api/auth/forgot-password",
+         RESET_PASSWORD: "/api/auth/reset-password",
     },
 
     DOCUMENTS: {
