@@ -29,8 +29,8 @@ const LS_KEY = "meetmind_guide_closed";
 
 // ⚠️ SET THIS to your exact Speech App domain (no trailing slash)
 // Must match VITE_MEETMIND_ORIGIN in Speech App's .env
-const SPEECH_APP_ORIGIN = import.meta.env.VITE_SPEECH_APP_ORIGIN || "https://speechtotext-sepia-nine.vercel.app";
-const SPEECH_APP_URL = "https://speechtotext-sepia-nine.vercel.app/";
+const SPEECH_APP_ORIGIN = import.meta.env.VITE_SPEECH_APP_ORIGIN || "https://live-ten-ebon.vercel.app/";
+const SPEECH_APP_URL = "https://live-ten-ebon.vercel.app/";
 
 // ─── step card ─────────────────────────────────────────────────────────────────
 const StepCard = ({ s }) => (
