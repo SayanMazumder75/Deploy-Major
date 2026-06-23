@@ -19,6 +19,15 @@ const documentSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // ── ADDED ──────────────────────────────────────────────────────────
+    // Cloudinary's public_id for this asset, needed to delete the file
+    // later via cloudinary.uploader.destroy(cloudinaryPublicId, ...).
+    // Not required: legacy documents uploaded before this migration
+    // have a localhost filePath and no cloudinaryPublicId — they are
+    // left as-is per the "no auto-migration" requirement.
+    cloudinaryPublicId: {
+        type: String
+    },
     fileSize: {
         type: Number,
         required: true

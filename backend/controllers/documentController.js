@@ -5,11 +5,17 @@ import { extractTextFromPDF } from '../utils/pdfParser.js';
 import { chunkText } from '../utils/textChunker.js';
 import fs from 'fs/promises';
 import mongoose from 'mongoose';
+import cloudinary from '../config/cloudinary.js';
 
 // @desc    Upload PDF document
 // @route   POST /api/documents/upload
 // @access  Private
 export const uploadDocument = async (req, res, next) => {
+    // Track the temp local path so the finally-style cleanup below can
+    // always reach it, whether we succeed, fail at parsing, or fail at
+    // the Cloudinary upload step.
+    let tempFilePath = null;
+
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -19,10 +25,12 @@ export const uploadDocument = async (req, res, next) => {
             });
         }
 
+        tempFilePath = req.file.path;
+
         const { title } = req.body;
 
         if (!title) {
-            await fs.unlink(req.file.path);
+            await fs.unlink(tempFilePath).catch(() => { });
             return res.status(400).json({
                 success: false,
                 error: 'Please provide a document title',
@@ -30,65 +38,72 @@ export const uploadDocument = async (req, res, next) => {
             });
         }
 
-        // Construct the URL
-        const baseUrl = `http://localhost:${process.env.PORT || 8000}`;
-        const fileUrl = `${baseUrl}/uploads/documents/${req.file.filename}`;
+        // ── Step 2: Extract text locally ────────────────────────────────
+        // extractTextFromPDF needs a real filesystem path, so this still
+        // runs against multer's temp file BEFORE anything touches
+        // Cloudinary — unchanged from the original flow.
+        const { text } = await extractTextFromPDF(tempFilePath);
 
-        // Create document
+        // ── Step 3: Generate chunks ──────────────────────────────────────
+        const chunks = chunkText(text, 500, 50);
+
+        // ── Step 4: Upload PDF to Cloudinary ────────────────────────────
+        // resource_type "raw" is required for non-image files (PDFs);
+        // Cloudinary's default "image" pipeline will silently fail or
+        // mis-handle them otherwise.
+        let cloudinaryResult;
+        try {
+            cloudinaryResult = await cloudinary.uploader.upload(tempFilePath, {
+                resource_type: 'raw',
+                folder: 'meetmind-documents',
+                // Keep the original filename (minus extension) visible in
+                // the Cloudinary dashboard for easier debugging; Cloudinary
+                // still appends its own unique suffix internally.
+                use_filename: true,
+                unique_filename: true,
+            });
+        } catch (uploadErr) {
+            await fs.unlink(tempFilePath).catch(() => { });
+            console.error('Cloudinary upload error:', uploadErr);
+            return res.status(502).json({
+                success: false,
+                error: 'Failed to upload document to cloud storage',
+                statusCode: 502
+            });
+        }
+
+        // ── Step 5: Save document with Cloudinary URL ───────────────────
         const document = await Document.create({
             userId: req.user._id,
             title,
             fileName: req.file.originalname,
-            filePath: fileUrl,
+            filePath: cloudinaryResult.secure_url,
+            cloudinaryPublicId: cloudinaryResult.public_id,
             fileSize: req.file.size,
-            status: 'processing'
-        });
-
-        // Process PDF
-        processPDF(document._id, req.file.path).catch(err => {
-            console.error('PDF processing error:', err);
-        });
-
-        res.status(201).json({
-            success: true,
-            data: document,
-            message: 'Document uploaded successfully. Processing in progress...'
-        });
-
-    } catch (error) {
-        // Clean up file on error
-        if (req.file) {
-            await fs.unlink(req.file.path).catch(() => { });
-        }
-        next(error);
-    }
-};
-
-// Helper function to process PDF
-const processPDF = async (documentId, filePath) => {
-    try {
-        const { text } = await extractTextFromPDF(filePath);
-
-        // Create chunks
-        const chunks = chunkText(text, 500, 50);
-
-        // Update document
-        await Document.findByIdAndUpdate(documentId, {
             extractedText: text,
             chunks: chunks,
             status: 'ready'
         });
 
-        console.log(`Document ${documentId} processed successfully`);
-    } catch (error) {
-        console.error(`Error processing document ${documentId}:`, error);
+        // ── Step 6: Delete temp local file ───────────────────────────────
+        await fs.unlink(tempFilePath).catch(() => { });
+        tempFilePath = null;
 
-        await Document.findByIdAndUpdate(documentId, {
-            status: 'failed'
+        res.status(201).json({
+            success: true,
+            data: document,
+            message: 'Document uploaded successfully.'
         });
+
+    } catch (error) {
+        // Clean up the temp file on any unexpected failure (e.g. PDF
+        // parsing throws) so multer's temp dir doesn't accumulate orphans.
+        if (tempFilePath) {
+            await fs.unlink(tempFilePath).catch(() => { });
+        }
+        next(error);
     }
 };
-
 
 // @desc    Get all user documents
 // @route   GET /api/documents
@@ -203,8 +218,25 @@ export const deleteDocument = async (req, res, next) => {
             });
         }
 
-        // Delete file from filesystem
-        await fs.unlink(document.filePath).catch(() => { });
+        // ── Delete from Cloudinary (new uploads) ─────────────────────────
+        // cloudinaryPublicId only exists on documents uploaded after this
+        // migration. Legacy documents (localhost filePath, no
+        // cloudinaryPublicId) are left untouched — there's no Cloudinary
+        // asset to remove for them, and we deliberately do NOT attempt
+        // fs.unlink(document.filePath) anymore since filePath is now
+        // either a Cloudinary URL (new docs) or an unreachable localhost
+        // URL (old docs); neither is a valid local filesystem path.
+        if (document.cloudinaryPublicId) {
+            await cloudinary.uploader.destroy(document.cloudinaryPublicId, {
+                resource_type: 'raw'
+            }).catch((err) => {
+                // Don't block the MongoDB delete on a Cloudinary hiccup —
+                // log it so an orphaned asset can be cleaned up manually,
+                // but the user's intent (remove this document) still
+                // succeeds.
+                console.error('Cloudinary destroy error:', err);
+            });
+        }
 
         // Delete document
         await document.deleteOne();
@@ -217,6 +249,3 @@ export const deleteDocument = async (req, res, next) => {
         next(error);
     }
 };
-
-
-
