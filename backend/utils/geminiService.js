@@ -1,14 +1,32 @@
 import dotenv from 'dotenv';
-import { GoogleGenAI } from "@google/genai";
+import Groq from 'groq-sdk';
 
 dotenv.config();
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-if (!process.env.GEMINI_API_KEY) {
-    console.error('FATAL ERROR: GEMINI_API_KEY is not set in the environment variables.');
+if (!process.env.GROQ_API_KEY) {
+    console.error('FATAL ERROR: GROQ_API_KEY is not set in the environment variables.');
     process.exit(1);
 }
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+const MODEL = "llama-3.3-70b-versatile";
+
+/**
+ * Internal helper — replaces ai.models.generateContent
+ * @param {string} prompt
+ * @param {number} maxTokens
+ * @returns {Promise<string>}
+ */
+const generateText = async (prompt, maxTokens = 4096) => {
+    const completion = await groq.chat.completions.create({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: maxTokens,
+    });
+    return completion.choices[0].message.content;
+};
 
 /**
  * Generate flashcards from text
@@ -29,15 +47,8 @@ Text:
 ${text.substring(0, 4000)}`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            // model: "gemini-1.5-flash",
-            contents: prompt,
-        });
+        const generatedText = await generateText(prompt);
 
-        const generatedText = response.text;
-
-        // Parse the response
         const flashcards = [];
         const cards = generatedText.split("---").filter(c => c.trim());
 
@@ -64,83 +75,17 @@ ${text.substring(0, 4000)}`;
 
         return flashcards.slice(0, count);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to generate flashcards');
     }
 };
 
-// /**
-//  * Generate quiz questions
-//  * @param {string} text - Document text
-//  * @param {number} numQuestions - Number of questions
-//  * @returns {Promise<Array<{question: string, options: Array, correctAnswer: string, explanation: string, difficulty: string}>>}
-//  */
-// export const generateQuiz = async (text, numQuestions = 5) => {
-//     const prompt = `Generate exactly ${numQuestions} multiple choice questions from the following text.
-// Format each question as:
-// Q: [Question]
-// O1: [Option 1]
-// O2: [Option 2]
-// O3: [Option 3]
-// O4: [Option 4]
-// C: [Correct option – exactly as written above]
-// E: [Brief explanation]
-// D: [Difficulty: easy, medium, or hard]
-
-// Separate questions with "---"
-
-// Text:
-// ${text.substring(0, 15000)}`;
-
-//     try {
-//         const response = await ai.models.generateContent({
-//             model: "gemini-2.5-flash-lite",
-//             contents: prompt,
-//         });
-
-//         const generatedText = response.text;
-
-//         const questions = [];
-//         const questionBlocks = generatedText.split("---").filter(q => q.trim());
-
-//         for (const block of questionBlocks) {
-//             const lines = block.trim().split('\n');
-//             let question = '', options = [], correctAnswer = '', explanation = '', difficulty = 'medium';
-
-//             for (const block of questionBlocks) {
-//                 const lines = block.trim().split('\n');
-//                 let question = '', options = [], correctAnswer = '', explanation = '', difficulty = 'medium';
-
-//                 for (const line of lines) {
-//                     const trimmed = line.trim();
-//                     if (trimmed.startsWith('Q:')) {
-//                         question = trimmed.substring(2).trim();
-//                     } else if (trimmed.match(/^O\d:/)) {
-//                         options.push(trimmed.substring(3).trim());
-//                     } else if (trimmed.startsWith('C:')) {
-//                         correctAnswer = trimmed.substring(2).trim();
-//                     } else if (trimmed.startsWith('E:')) {
-//                         explanation = trimmed.substring(2).trim();
-//                     } else if (trimmed.startsWith('D:')) {
-//                         const diff = trimmed.substring(2).trim().toLowerCase();
-//                         if (['easy', 'medium', 'hard'].includes(diff)) {
-//                             difficulty = diff;
-//                         }
-//                     }
-//                 }
-
-//                 if (question && options.length === 4 && correctAnswer) {
-//                     questions.push({ question, options, correctAnswer, explanation, difficulty });
-//                 }
-//             }
-
-//             return questions.slice(0, numQuestions);}
-//         } catch (error) {
-//             console.error('Gemini API error:', error);
-//             throw new Error('Failed to generate quiz');
-//         }
-//     };
-
+/**
+ * Generate quiz questions
+ * @param {string} text - Document text
+ * @param {number} numQuestions - Number of questions
+ * @returns {Promise<Array<{question: string, options: Array, correctAnswer: string, explanation: string, difficulty: string}>>}
+ */
 export const generateQuiz = async (text, numQuestions = 5) => {
     const prompt = `Generate exactly ${numQuestions} multiple choice questions from the following text.
 Format each question as:
@@ -159,13 +104,8 @@ Text:
 ${text.substring(0, 15000)}`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-
-        const generatedText = response.text;
-        console.log("GEMINI RAW OUTPUT:\n", generatedText); //hehhehe
+        const generatedText = await generateText(prompt);
+        console.log("GROQ RAW OUTPUT:\n", generatedText);
 
         const questions = [];
         const questionBlocks = generatedText.split("---").filter(q => q.trim());
@@ -184,14 +124,10 @@ ${text.substring(0, 15000)}`;
 
                 if (trimmed.startsWith('Q:')) {
                     question = trimmed.substring(2).trim();
-                }
-                else if (trimmed.match(/^O\d:/)) {
+                } else if (trimmed.match(/^O\d:/)) {
                     options.push(trimmed.substring(3).trim());
-                }
-                else if (trimmed.startsWith('C:')) {
+                } else if (trimmed.startsWith('C:')) {
                     let value = trimmed.substring(2).trim();
-
-                    // Handle O1/O2 format
                     const match = value.match(/^O(\d)$/);
                     if (match) {
                         const index = parseInt(match[1]) - 1;
@@ -201,11 +137,9 @@ ${text.substring(0, 15000)}`;
                     } else {
                         correctAnswer = value;
                     }
-                }
-                else if (trimmed.startsWith('E:')) {
+                } else if (trimmed.startsWith('E:')) {
                     explanation = trimmed.substring(2).trim();
-                }
-                else if (trimmed.startsWith('D:')) {
+                } else if (trimmed.startsWith('D:')) {
                     const diff = trimmed.substring(2).trim().toLowerCase();
                     if (['easy', 'medium', 'hard'].includes(diff)) {
                         difficulty = diff;
@@ -214,25 +148,16 @@ ${text.substring(0, 15000)}`;
             }
 
             if (question && options.length === 4 && correctAnswer) {
-                questions.push({
-                    question,
-                    options,
-                    correctAnswer,
-                    explanation,
-                    difficulty
-                });
+                questions.push({ question, options, correctAnswer, explanation, difficulty });
             }
         }
 
         return questions.slice(0, numQuestions);
-
     } catch (error) {
         console.error('FULL ERROR:', error);
-        throw error; // 👈 VERY IMPORTANT
+        throw error;
     }
 };
-
-
 
 /**
  * Generate document summary
@@ -255,19 +180,13 @@ Formatting Rules:
 
 The response should feel like clean digital study notes.
 
-
 Text:
 ${text.substring(0, 20000)}`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-        const generatedText = response.text;
-        return generatedText;
+        return await generateText(prompt, 8192);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to generate summary');
     }
 };
@@ -276,15 +195,12 @@ ${text.substring(0, 20000)}`;
  * Chat with document context
  * @param {string} question - User question
  * @param {Array<Object>} chunks - Relevant document chunks
+ * @param {Array<Object>} previousMessages - Conversation history
  * @returns {Promise<string>}
  */
-export const chatWithContext = async (
-    question,
-    chunks,
-    previousMessages = []
-) => {
+export const chatWithContext = async (question, chunks, previousMessages = []) => {
     const context = chunks.map((c, i) => `[Chunk ${i + 1}]\n${c.content}`).join('\n\n');
-    const conversationHistory = previousMessages //PHASE 2
+    const conversationHistory = previousMessages
         .map(msg => `${msg.role.toUpperCase()}: ${msg.content}`)
         .join('\n');
 
@@ -322,17 +238,10 @@ ${question}
 AI TUTOR RESPONSE:
 `;
 
-
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-
-        const generatedText = response.text;
-        return generatedText;
+        return await generateText(prompt);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to process chat request');
     }
 };
@@ -352,19 +261,13 @@ Context:
 ${context.substring(0, 10000)}`;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-        const generatedText = response.text;
-        return generatedText;
+        return await generateText(prompt);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to explain concept');
     }
 };
 
-//AI ACTION CHANGE AND MODIFICATION (VIVA)
 export const generateVivaQuestions = async (text) => {
     const prompt = `
 Generate professional viva and oral exam questions from the study material.
@@ -386,34 +289,22 @@ EXAMPLE FORMAT:
 
 2. Explain modularity in software engineering.
 
-3. What is abstraction?
-
 ## Advanced Topics
 
-4. Explain coupling and cohesion.
-
-5. What is architectural design?
+3. Explain coupling and cohesion.
 
 STUDY MATERIAL:
 ${text.substring(0, 4000)}
 `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            // model: "gemini-1.5-flash",
-            contents: prompt,
-        });
-
-        return response.text;
-
+        return await generateText(prompt);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to generate viva questions');
     }
 };
 
-// For Revison notes
 export const generateRevisionNotes = async (text) => {
     const prompt = `
 Create professional revision notes from the provided study material.
@@ -433,20 +324,13 @@ ${text.substring(0, 4000)}
 `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-
-        return response.text;
-
+        return await generateText(prompt);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to generate revision notes');
     }
 };
 
-//Memory Tricks
 export const generateMemoryTricks = async (text) => {
     const prompt = `
 Create visually well-structured memory tricks and mnemonics from the study material.
@@ -462,40 +346,17 @@ IMPORTANT FORMATTING RULES:
 - Avoid long paragraphs
 - Make the response highly readable for students
 
-GOOD FORMAT EXAMPLE:
-
-## Memory Trick 1
-
-**Keyword:** Example
-
-- Point 1
-- Point 2
-
-## Memory Trick 2
-
-**Mnemonic:** Example
-
-- Easy explanation
-
 STUDY MATERIAL:
 ${text.substring(0, 4000)}
 `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: prompt,
-        });
-
-        return response.text;
-
+        return await generateText(prompt);
     } catch (error) {
-        console.error('Gemini API error:', error);
+        console.error('Groq API error:', error);
         throw new Error('Failed to generate memory tricks');
     }
 };
-
-// ─── ADD THESE FUNCTIONS TO YOUR geminiService.js ────────────────────────────
 
 export const generateVivaQuestion = async (text, topic, personality, previousQuestions = []) => {
     const personalityPrompts = {
@@ -539,12 +400,12 @@ ${text.substring(0, 3000)}
 Ask the next viva question now:
 `;
 
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-    });
-
-    return response.text.trim();
+    try {
+        return await generateText(prompt, 256);
+    } catch (error) {
+        console.error('Groq API error:', error);
+        throw new Error('Failed to generate viva question');
+    }
 };
 
 export const evaluateVivaAnswer = async (question, answer, personality, documentText) => {
@@ -576,19 +437,14 @@ ${documentText.substring(0, 1000)}
 Your feedback:
 `;
 
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-    });
-
-    return response.text.trim();
+    try {
+        return await generateText(prompt, 512);
+    } catch (error) {
+        console.error('Groq API error:', error);
+        throw new Error('Failed to evaluate viva answer');
+    }
 };
 
-
 export const rawGenerate = async (prompt) => {
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-    });
-    return response.text;
+    return await generateText(prompt);
 };
