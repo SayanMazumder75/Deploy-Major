@@ -1,4 +1,6 @@
-export const BASE_URL = "http://localhost:8000";
+// In production, set VITE_API_BASE_URL in the Vercel dashboard (e.g. https://your-backend.onrender.com).
+// For local dev, copy `.env.example` to `.env` (defaults to http://localhost:8000).
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export const API_PATHS = {
     AUTH: {

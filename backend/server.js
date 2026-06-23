@@ -28,22 +28,42 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
-//Middleware to handle CORS
+// CORS — allow-list driven by CLIENT_URL env var.
+// Set CLIENT_URL on Render to your Vercel URL (comma-separated for multiple origins).
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
 app.use(
     cors({
-        origin: "*",
-        method: ["GET", "POST", "PUT", "DELETE"],
-        allowedHeaders: ["Content-Type", "Authorization"],
+        origin: (origin, callback) => {
+            // Allow requests with no Origin header (curl, server-to-server, health checks)
+            if (!origin) return callback(null, true);
+            if (allowedOrigins.includes(origin)) return callback(null, true);
+            return callback(new Error(`CORS: origin ${origin} not allowed`));
+        },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true,
-
     })
 );
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true}));
+app.use(express.urlencoded({ extended: true }));
 
 // Static folder for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Health check (used by Render)
+app.get('/api/health', (req, res) => {
+    res.status(200).json({
+        success: true,
+        status: 'ok',
+        env: process.env.NODE_ENV || 'development',
+        timestamp: new Date().toISOString(),
+    });
+});
 
 //Routes
 app.use('/api/auth', authRoutes)
