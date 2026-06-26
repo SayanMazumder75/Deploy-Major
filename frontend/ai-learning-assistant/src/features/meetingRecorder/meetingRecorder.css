@@ -1,0 +1,770 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   AI Meeting Recorder — scoped styles
+   Every selector is nested under .meeting-recorder-root so it does NOT leak
+   into the rest of the main app. The CSS variables and class names below are
+   ported verbatim from the standalone Deploy-Whisper client; only the scoping
+   wrapper has been added.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.meeting-recorder-root {
+    /* design tokens (scoped — do NOT pollute :root) */
+    --mr-bg-primary: #15091f;
+    --mr-bg-secondary: #1e1130;
+    --mr-bg-tertiary: #2a1b40;
+    --mr-bg-card: rgba(255, 255, 255, 0.03);
+    --mr-text-primary: #f5f3f9;
+    --mr-text-secondary: #b8aecb;
+    --mr-text-tertiary: #8478a0;
+    --mr-border-color: rgba(255, 255, 255, 0.08);
+    --mr-border-hover: rgba(255, 255, 255, 0.16);
+    --mr-gradient-primary: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+    --mr-accent: #a855f7;
+    --mr-accent-hover: #c084fc;
+    --mr-accent-soft: rgba(168, 85, 247, 0.15);
+    --mr-danger: #ff5c8a;
+    --mr-success: #4ade80;
+    --mr-warning: #fbbf24;
+    --mr-radius-md: 10px;
+    --mr-radius-lg: 16px;
+    --mr-radius-xl: 24px;
+
+    /* aliases used by ported rules below */
+    --bg-primary: var(--mr-bg-primary);
+    --bg-secondary: var(--mr-bg-secondary);
+    --bg-tertiary: var(--mr-bg-tertiary);
+    --bg-card: var(--mr-bg-card);
+    --text-primary: var(--mr-text-primary);
+    --text-secondary: var(--mr-text-secondary);
+    --text-tertiary: var(--mr-text-tertiary);
+    --border-color: var(--mr-border-color);
+    --border-hover: var(--mr-border-hover);
+    --gradient-primary: var(--mr-gradient-primary);
+    --accent: var(--mr-accent);
+    --accent-hover: var(--mr-accent-hover);
+    --accent-soft: var(--mr-accent-soft);
+    --danger: var(--mr-danger);
+    --success: var(--mr-success);
+    --warning: var(--mr-warning);
+    --radius-md: var(--mr-radius-md);
+    --radius-lg: var(--mr-radius-lg);
+    --radius-xl: var(--mr-radius-xl);
+
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border-radius: var(--mr-radius-xl);
+    overflow: hidden;
+    min-height: calc(100vh - 120px);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        sans-serif;
+    line-height: 1.6;
+}
+
+/* ── Dashboard ───────────────────────────────────────────────────────────── */
+.meeting-recorder-root .dashboard {
+    width: 100%;
+    padding: 48px 5vw 64px;
+}
+.meeting-recorder-root .hero {
+    margin-bottom: 36px;
+}
+.meeting-recorder-root .hero-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-hover);
+    background: var(--accent-soft);
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+}
+.meeting-recorder-root .dashboard h1 {
+    font-size: clamp(22px, 3.5vw, 42px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    max-width: 60vw;
+    font-weight: 700;
+}
+.meeting-recorder-root .dashboard-subtitle {
+    color: var(--text-secondary);
+    font-size: clamp(12px, 1.3vw, 16px);
+    line-height: 1.7;
+    max-width: 55vw;
+}
+.meeting-recorder-root .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(8px, 1.2vw, 16px);
+    margin-bottom: 28px;
+}
+.meeting-recorder-root .stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 24px);
+}
+.meeting-recorder-root .stat-label {
+    font-size: clamp(9px, 0.9vw, 12px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 0 0 6px;
+}
+.meeting-recorder-root .stat-value {
+    font-size: clamp(20px, 2.5vw, 32px);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+    margin: 0;
+}
+.meeting-recorder-root .dashboard-section-title {
+    font-size: clamp(16px, 1.6vw, 22px);
+    font-weight: 700;
+    margin: 40px 0 14px;
+    color: var(--text-primary);
+}
+
+/* ── Recording controls ──────────────────────────────────────────────────── */
+.meeting-recorder-root .recording-controls {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: clamp(16px, 2vw, 24px) clamp(16px, 2.5vw, 28px);
+    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.meeting-recorder-root .source-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.meeting-recorder-root .source-label-text {
+    font-size: clamp(10px, 0.9vw, 12px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0;
+}
+.meeting-recorder-root .source-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.meeting-recorder-root .source-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: clamp(7px, 0.8vw, 10px) clamp(12px, 1.4vw, 18px);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: clamp(11px, 1vw, 14px);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.meeting-recorder-root .source-option:hover {
+    border-color: rgba(168, 85, 247, 0.4);
+    background: rgba(168, 85, 247, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+}
+.meeting-recorder-root .source-option.active {
+    border-color: #a855f7;
+    background: rgba(168, 85, 247, 0.15);
+    color: #fff;
+    font-weight: 600;
+}
+.meeting-recorder-root .source-opt-emoji {
+    font-size: clamp(13px, 1.2vw, 16px);
+    line-height: 1;
+}
+.meeting-recorder-root .recording-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.meeting-recorder-root .btn-start,
+.meeting-recorder-root .btn-stop {
+    flex: 1;
+    min-width: 140px;
+    padding: clamp(10px, 1.2vw, 14px) clamp(16px, 2vw, 24px);
+    border: none;
+    border-radius: 10px;
+    font-size: clamp(12px, 1.1vw, 15px);
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    font-family: inherit;
+}
+.meeting-recorder-root .btn-start {
+    background: linear-gradient(135deg, #a855f7, #ec4899);
+    color: #fff;
+}
+.meeting-recorder-root .btn-start:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+.meeting-recorder-root .btn-start:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.meeting-recorder-root .btn-stop {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.meeting-recorder-root .btn-stop:not(:disabled) {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.meeting-recorder-root .btn-stop:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+    transform: translateY(-1px);
+}
+.meeting-recorder-root .btn-stop:disabled {
+    cursor: not-allowed;
+}
+.meeting-recorder-root .recording-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 8px;
+    padding: 10px 16px;
+}
+.meeting-recorder-root .rec-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: mr-pulse-rec 1.2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+@keyframes mr-pulse-rec {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+}
+.meeting-recorder-root .rec-label {
+    font-size: clamp(10px, 0.9vw, 13px);
+    font-weight: 600;
+    color: #f87171;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.meeting-recorder-root .rec-source-tag {
+    font-size: clamp(10px, 0.9vw, 12px);
+    color: rgba(248, 113, 113, 0.8);
+    background: rgba(239, 68, 68, 0.08);
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+.meeting-recorder-root .rec-timer {
+    margin-left: auto;
+    font-size: clamp(11px, 1vw, 14px);
+    font-weight: 700;
+    color: #f87171;
+    font-variant-numeric: tabular-nums;
+}
+.meeting-recorder-root .recording-hint {
+    font-size: clamp(11px, 0.9vw, 13px);
+    color: rgba(255, 255, 255, 0.45);
+    margin: 0;
+    line-height: 1.6;
+}
+.meeting-recorder-root .recording-hint strong {
+    color: rgba(255, 255, 255, 0.7);
+}
+.meeting-recorder-root .recording-error {
+    font-size: clamp(11px, 0.9vw, 13px);
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0;
+}
+
+/* ── Recordings list ─────────────────────────────────────────────────────── */
+.meeting-recorder-root .recordings-list {
+    margin-top: 8px;
+}
+.meeting-recorder-root .recordings-list ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    margin: 0;
+}
+.meeting-recorder-root .recording-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    transition: all 0.15s ease;
+}
+.meeting-recorder-root .recording-item:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-tertiary);
+    transform: translateY(-1px);
+}
+.meeting-recorder-root .recording-item a {
+    display: flex;
+    align-items: center;
+    padding: clamp(10px, 1.2vw, 16px) clamp(12px, 1.5vw, 20px);
+    color: var(--text-primary);
+    gap: clamp(8px, 1vw, 16px);
+    min-width: 0;
+    text-decoration: none;
+}
+.meeting-recorder-root .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: clamp(9px, 0.8vw, 12px);
+    font-weight: 600;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.meeting-recorder-root .source-meeting {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.meeting-recorder-root .source-youtube {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.meeting-recorder-root .source-voice {
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.meeting-recorder-root .source-emoji {
+    font-size: 12px;
+}
+.meeting-recorder-root .rec-title {
+    font-weight: 600;
+    font-size: clamp(11px, 1vw, 14px);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.meeting-recorder-root .rec-date {
+    color: var(--text-tertiary);
+    font-size: clamp(9px, 0.8vw, 12px);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.meeting-recorder-root .rec-status {
+    font-size: clamp(9px, 0.8vw, 11px);
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.meeting-recorder-root .status-recording {
+    background: rgba(255, 92, 138, 0.15);
+    color: var(--danger);
+}
+.meeting-recorder-root .status-processing {
+    background: rgba(251, 191, 36, 0.15);
+    color: var(--warning);
+}
+.meeting-recorder-root .status-completed {
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--success);
+}
+.meeting-recorder-root .btn-delete {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: clamp(9px, 0.8vw, 11px);
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+}
+.meeting-recorder-root .btn-delete:hover {
+    background: var(--danger);
+    color: #fff;
+}
+.meeting-recorder-root .recordings-list > p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+/* ── Confirm-delete modal (rendered inside RecordingsList) ───────────────── */
+.mr-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+.mr-modal-card {
+    background: var(--mr-bg-secondary);
+    border: 1px solid var(--mr-border-color);
+    border-radius: var(--mr-radius-lg);
+    padding: 28px;
+    max-width: 380px;
+    width: 90%;
+    color: var(--mr-text-primary);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        sans-serif;
+}
+.mr-modal-card h3 {
+    font-size: 18px;
+    margin: 0 0 8px;
+    color: var(--mr-text-primary);
+}
+.mr-modal-card p {
+    font-size: 14px;
+    color: var(--mr-text-secondary);
+    margin: 0 0 24px;
+    line-height: 1.6;
+}
+.mr-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+.mr-btn-cancel {
+    background: transparent;
+    border: 1px solid var(--mr-border-color);
+    color: var(--mr-text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: var(--mr-radius-md);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    font-family: inherit;
+}
+.mr-btn-cancel:hover {
+    border-color: var(--mr-border-hover);
+    color: var(--mr-text-primary);
+}
+.mr-btn-confirm-delete {
+    background: var(--mr-danger);
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 20px;
+    border-radius: var(--mr-radius-md);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    font-family: inherit;
+}
+.mr-btn-confirm-delete:hover {
+    filter: brightness(1.1);
+}
+
+/* ── Meeting detail page ─────────────────────────────────────────────────── */
+.meeting-recorder-root .md-page {
+    width: 100%;
+    padding: 32px 5vw 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.meeting-recorder-root .md-video-wrap {
+    width: 100%;
+    background: #000;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    aspect-ratio: 16 / 9;
+    max-height: 50vh;
+}
+.meeting-recorder-root .md-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+.meeting-recorder-root .md-body {
+    display: grid;
+    grid-template-columns: clamp(160px, 18vw, 230px) 1fr;
+    gap: 16px;
+    align-items: start;
+}
+.meeting-recorder-root .md-sidebar {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 72px;
+}
+.meeting-recorder-root .md-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: clamp(8px, 1vw, 12px) clamp(10px, 1.2vw, 14px);
+    border-radius: var(--radius-md);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: clamp(11px, 1vw, 13px);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+.meeting-recorder-root .md-tab:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+.meeting-recorder-root .md-tab.active {
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    font-weight: 700;
+}
+.meeting-recorder-root .md-tab-emoji {
+    font-size: clamp(13px, 1.2vw, 16px);
+    flex-shrink: 0;
+}
+.meeting-recorder-root .md-tab-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.meeting-recorder-root .md-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    min-height: 400px;
+}
+.meeting-recorder-root .md-panel {
+    padding: clamp(16px, 2vw, 24px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.meeting-recorder-root .md-panel-title {
+    font-size: clamp(14px, 1.4vw, 18px);
+    font-weight: 700;
+    color: var(--text-primary);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    margin: 0;
+}
+.meeting-recorder-root .md-transcript-box {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    max-height: 45vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.meeting-recorder-root .md-transcript-line {
+    font-size: clamp(12px, 1.1vw, 14px);
+    color: var(--text-secondary);
+    line-height: 1.75;
+    margin: 0;
+}
+.meeting-recorder-root .md-summary-text {
+    font-size: clamp(12px, 1.1vw, 14px);
+    color: var(--text-secondary);
+    line-height: 1.8;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin: 0;
+}
+.meeting-recorder-root .md-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    margin: 0;
+}
+.meeting-recorder-root .md-list li {
+    font-size: clamp(12px, 1.1vw, 14px);
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 10px 14px 10px 32px;
+    line-height: 1.6;
+    position: relative;
+}
+.meeting-recorder-root .md-list li::before {
+    content: "•";
+    position: absolute;
+    left: 12px;
+    color: var(--accent);
+    font-size: 16px;
+}
+.meeting-recorder-root .md-list--actions li::before {
+    content: "✓";
+    color: var(--success);
+    font-size: 12px;
+    font-weight: 700;
+    top: 11px;
+}
+.meeting-recorder-root .md-placeholder {
+    font-size: clamp(11px, 1vw, 13px);
+    color: var(--text-tertiary);
+    font-style: italic;
+    margin: 0;
+}
+.meeting-recorder-root .md-error {
+    font-size: clamp(11px, 1vw, 13px);
+    color: var(--danger);
+    background: rgba(255, 92, 138, 0.1);
+    border: 1px solid rgba(255, 92, 138, 0.2);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    margin: 0;
+}
+.meeting-recorder-root .md-btn-generate {
+    background: var(--gradient-primary);
+    border: none;
+    color: #fff;
+    font-size: clamp(11px, 1vw, 13px);
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: var(--radius-md);
+    transition: opacity 0.15s;
+    align-self: flex-start;
+    cursor: pointer;
+    font-family: inherit;
+}
+.meeting-recorder-root .md-btn-generate:hover:not(:disabled) {
+    opacity: 0.85;
+}
+.meeting-recorder-root .md-btn-generate:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* ── Header strip shown above Dashboard so users know which feature it is ─ */
+.meeting-recorder-root .mr-feature-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 5vw 0;
+}
+.meeting-recorder-root .mr-feature-header .mr-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent-hover);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    transition: background 0.15s, border-color 0.15s;
+}
+.meeting-recorder-root .mr-feature-header .mr-back-link:hover {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.3);
+}
+.meeting-recorder-root .mr-feature-header .mr-premium-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #f59e0b, #ec4899);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35);
+}
+
+/* ── Responsive overrides (ported as-is) ─────────────────────────────────── */
+@media (max-width: 768px) {
+    .meeting-recorder-root .md-page {
+        padding: 20px 16px 48px;
+    }
+    .meeting-recorder-root .md-body {
+        grid-template-columns: 1fr;
+    }
+    .meeting-recorder-root .md-sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        position: static;
+    }
+    .meeting-recorder-root .md-tab {
+        flex: 1;
+        min-width: 100px;
+        justify-content: center;
+    }
+    .meeting-recorder-root .md-video-wrap {
+        max-height: 35vh;
+    }
+}
+@media (max-width: 600px) {
+    .meeting-recorder-root .dashboard {
+        padding: 32px 16px 48px;
+    }
+    .meeting-recorder-root .dashboard h1 {
+        max-width: 100%;
+    }
+    .meeting-recorder-root .dashboard-subtitle {
+        max-width: 100%;
+    }
+    .meeting-recorder-root .stats-grid {
+        gap: 8px;
+    }
+}
+@media (max-width: 420px) {
+    .meeting-recorder-root .md-tab-label {
+        display: none;
+    }
+    .meeting-recorder-root .md-tab {
+        justify-content: center;
+        padding: 10px;
+    }
+    .meeting-recorder-root .md-tab-emoji {
+        font-size: 18px;
+    }
+}

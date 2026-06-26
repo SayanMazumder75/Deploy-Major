@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/AuthContext";
+import { usePremiumPopup } from "../../features/meetingRecorder/hooks/usePremiumPopup.js";
+import PremiumInfoPopup from "../../features/meetingRecorder/components/PremiumInfoPopup.jsx";
 
 import {
     LayoutDashboard,
@@ -12,6 +14,7 @@ import {
     Brain,
     BrainCircuit,
     Mic,
+    Radio,
     X,
     ChevronLeft,
     ChevronRight,
@@ -19,12 +22,26 @@ import {
 } from "lucide-react";
 
 // ─── nav config ───────────────────────────────────────────────────────────────
+// Items can opt-in to a "Premium" badge and a click-intercept so they show an
+// informational popup before navigating. The popup itself is owned by this
+// Sidebar (see usePremiumPopup) and is purely informational — it never blocks
+// access. Auth / subscription gating can be wired into the same intercept
+// point later without touching the link list.
+const MEETING_RECORDER_ROUTE = "/meeting-recorder";
+
 const NAV_LINKS = [
-    { to: "/dashboard",         icon: LayoutDashboard, text: "Dashboard"          },
-    { to: "/documents",         icon: FileText,        text: "Documents"          },
-    { to: "/flashcards",        icon: BookOpen,        text: "Flashcards"         },
-    { to: "/study-vault",       icon: Brain,           text: "Study Vault"        },
-    { to: "/meeting-assistant", icon: Mic,             text: "AI Meeting Assistant"},
+    { to: "/dashboard",         icon: LayoutDashboard, text: "Dashboard"            },
+    { to: "/documents",         icon: FileText,        text: "Documents"            },
+    { to: "/flashcards",        icon: BookOpen,        text: "Flashcards"           },
+    { to: "/study-vault",       icon: Brain,           text: "Study Vault"          },
+    { to: "/meeting-assistant", icon: Mic,             text: "AI Meeting Assistant" },
+    {
+        to: MEETING_RECORDER_ROUTE,
+        icon: Radio,
+        text: "AI Meeting Recorder",
+        premium: true,
+        interceptClick: true,
+    },
     { to: "/profile",           icon: User,            text: "Profile"            },
     { to: "/calendar",          icon: CalendarDays,    text: "Study Calendar"     },
 ];
@@ -89,8 +106,55 @@ const Tooltip = ({ label, children }) => {
     );
 };
 
+// ─── small "Premium" badge shown next to upgrade-gated nav items ───────────────
+const PremiumBadge = ({ collapsed }) => {
+    if (collapsed) {
+        // In collapsed mode, just show a tiny gold dot on the icon's corner.
+        return (
+            <span
+                aria-label="Premium"
+                style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 10,
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg,#f59e0b,#ec4899)",
+                    boxShadow: "0 0 6px rgba(245,158,11,0.7)",
+                    zIndex: 3,
+                    pointerEvents: "none",
+                }}
+            />
+        );
+    }
+    return (
+        <span
+            style={{
+                position: "relative",
+                zIndex: 1,
+                marginLeft: "auto",
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 9.5,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#fff",
+                background: "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
+                padding: "2px 7px",
+                borderRadius: 999,
+                boxShadow: "0 2px 8px rgba(236,72,153,0.4)",
+                whiteSpace: "nowrap",
+            }}
+        >
+            Premium
+        </span>
+    );
+};
+
 // ─── single nav item ──────────────────────────────────────────────────────────
-const NavItem = ({ link, collapsed, onClose }) => {
+const NavItem = ({ link, collapsed, onClose, onIntercept }) => {
     const Icon = link.icon;
 
     const inner = (isActive) => (
@@ -168,6 +232,9 @@ const NavItem = ({ link, collapsed, onClose }) => {
                 )}
             </AnimatePresence>
 
+            {/* Premium badge (full label or corner dot) */}
+            {link.premium && <PremiumBadge collapsed={collapsed} />}
+
             {/* active left bar */}
             {isActive && !collapsed && (
                 <motion.div
@@ -188,10 +255,24 @@ const NavItem = ({ link, collapsed, onClose }) => {
         </motion.div>
     );
 
+    // Intercept click on opt-in items (e.g. AI Meeting Recorder) so the
+    // informational popup can show before navigation. If `onIntercept` returns
+    // truthy, the default NavLink navigation is prevented.
+    const handleClick = (e) => {
+        if (link.interceptClick && typeof onIntercept === "function") {
+            const handled = onIntercept(link, e);
+            if (handled) {
+                e.preventDefault();
+                return;
+            }
+        }
+        if (onClose) onClose();
+    };
+
     const navEl = (
         <NavLink
             to={link.to}
-            onClick={onClose}
+            onClick={handleClick}
             style={{ textDecoration: "none", display: "block" }}
         >
             {({ isActive }) => inner(isActive)}
@@ -199,7 +280,9 @@ const NavItem = ({ link, collapsed, onClose }) => {
     );
 
     return collapsed ? (
-        <Tooltip label={link.text}>{navEl}</Tooltip>
+        <Tooltip label={link.premium ? `${link.text} · Premium` : link.text}>
+            {navEl}
+        </Tooltip>
     ) : navEl;
 };
 
@@ -211,6 +294,9 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
     // desktop collapse state (independent from mobile drawer)
     const [collapsed, setCollapsed] = useState(false);
 
+    // Premium-info popup state for the AI Meeting Recorder entry.
+    const meetingRecorderPopup = usePremiumPopup();
+
     const handleLogout = () => {
         logout();
         navigate("/login");
@@ -219,6 +305,34 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
     // close mobile drawer when item clicked
     const handleMobileClose = () => {
         if (window.innerWidth < 768) toggleSidebar();
+    };
+
+    // Hook into nav items flagged with `interceptClick`. Returning `true`
+    // signals NavItem to call e.preventDefault(). For the Meeting Recorder
+    // the popup is shown ONLY the first time; subsequent clicks navigate
+    // directly (handled inside usePremiumPopup → requestOpen).
+    const handleNavIntercept = (link) => {
+        if (link.to === MEETING_RECORDER_ROUTE) {
+            const opened = meetingRecorderPopup.requestOpen(() => {
+                handleMobileClose();
+                navigate(MEETING_RECORDER_ROUTE);
+            });
+            return opened; // true → we showed the popup, suppress default nav
+        }
+        return false;
+    };
+
+    // "Continue" → mark as seen and navigate to the recorder.
+    const handleContinue = () => {
+        meetingRecorderPopup.dismiss();
+        handleMobileClose();
+        navigate(MEETING_RECORDER_ROUTE);
+    };
+
+    // "Maybe Later" → just close; do NOT set the seen flag so the popup will
+    // re-appear next time. This matches the spec exactly.
+    const handleMaybeLater = () => {
+        meetingRecorderPopup.close();
     };
 
     // ── shared inner sidebar content ──────────────────────────────────────────
@@ -352,6 +466,7 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
                         link={link}
                         collapsed={collapsed && !isMobile}
                         onClose={handleMobileClose}
+                        onIntercept={handleNavIntercept}
                     />
                 ))}
             </nav>
@@ -460,6 +575,13 @@ const Sidebar = ({ isSidebarOpen, toggleSidebar }) => {
             >
                 <SidebarContent />
             </aside>
+
+            {/* ── AI Meeting Recorder — informational Premium popup ── */}
+            <PremiumInfoPopup
+                isOpen={meetingRecorderPopup.isOpen}
+                onContinue={handleContinue}
+                onMaybeLater={handleMaybeLater}
+            />
         </>
     );
 };
