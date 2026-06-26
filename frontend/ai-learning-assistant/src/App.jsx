@@ -14,11 +14,10 @@ import QuizTakePage from './pages/Quizzes/QuizTakePage';
 import QuizResultPage from './pages/Quizzes/QuizResultPage';
 import ProfilePage from './pages/Profile/ProfilePage';
 const MeetingAssistantPage = React.lazy(() => import('./pages/MeetingAssistant/MeetingAssistantPage'));
-// AI Meeting Recorder — lazy-loaded so the recorder bundle (socket.io-client,
-// MediaRecorder code, large CSS) is fetched only when the user actually opens
-// the feature. The pages live in src/features/meetingRecorder/.
+// AI Meeting Recorder — lazy-loaded iframe page (mirrors MeetingAssistantPage,
+// without the Quick-Start onboarding section). The full recorder app lives at
+// VITE_MEETING_RECORDER_URL.
 const MeetingRecorderDashboardPage = React.lazy(() => import('./features/meetingRecorder/pages/MeetingRecorderDashboardPage'));
-const MeetingRecorderDetailPage = React.lazy(() => import('./features/meetingRecorder/pages/MeetingRecorderDetailPage'));
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import StudyVaultPage from "./pages/StudyVault/StudyVaultPage";
@@ -56,10 +55,9 @@ const App = () => {
           <Route path="/quizzes/:quizId/results" element={<QuizResultPage />} />
           <Route path="/meeting-assistant" element={<MeetingAssistantPage />} />
           {/* AI Meeting Recorder — informational Premium popup is triggered
-              from the sidebar; routes themselves stay open so future auth /
-              subscription gating can be layered in without restructuring. */}
+              from the sidebar before navigation; the page itself just
+              embeds the existing recorder deployment. */}
           <Route path="/meeting-recorder" element={<MeetingRecorderDashboardPage />} />
-          <Route path="/meeting-recorder/:id" element={<MeetingRecorderDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/study-vault" element={<StudyVaultPage />} />
           <Route path="/calendar" element={<StudyCalendarPage />} />
