@@ -3,11 +3,13 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTheme } from "../../context/ThemeContext.jsx";
+import { usePremiumPopup } from "../../features/meetingRecorder/hooks/usePremiumPopup.js";
+import PremiumInfoPopup from "../../features/meetingRecorder/components/PremiumInfoPopup.jsx";
 import {
     Bell, Search, BrainCircuit, LayoutDashboard, FileText,
     BookOpen, Brain, User, LogOut, ChevronDown,
-    Mic, CalendarDays, Sparkles, X, Menu,
-    Zap, ArrowRight, Clock, Hash, Sun, Moon,
+    Mic, Radio, CalendarDays, Sparkles, X, Menu,
+    Zap, ArrowRight, Clock, Hash, Sun, Moon, Crown,
 } from "lucide-react";
 
 // ─── hooks ─────────────────────────────────────────────────────────────────────
@@ -30,12 +32,26 @@ const useOutsideClick = (ref, cb) => {
 };
 
 // ─── constants ─────────────────────────────────────────────────────────────────
+// Items can opt-in to a small "Premium" pill and a click-intercept so they
+// show an informational popup before navigating. The popup itself is owned
+// by the Header (see usePremiumPopup) and is purely informational — it
+// never blocks access. Auth / subscription gating can later be wired into
+// the same intercept point without touching the link list.
+const MEETING_RECORDER_ROUTE = "/meeting-recorder";
+
 const NAV_LINKS = [
     { to: "/dashboard",          icon: LayoutDashboard, label: "Dashboard"            },
     { to: "/documents",          icon: FileText,         label: "Documents"            },
     { to: "/flashcards",         icon: BookOpen,          label: "Flashcards"           },
     { to: "/study-vault",        icon: Brain,             label: "Study Vault"          },
     { to: "/meeting-assistant",  icon: Mic,               label: "AI Meeting Assistant" },
+    {
+        to: MEETING_RECORDER_ROUTE,
+        icon: Radio,
+        label: "AI Meeting Recorder",
+        premium: true,
+        interceptClick: true,
+    },
 ];
 
 const PROFILE_MENU = [
@@ -63,10 +79,21 @@ const RECENT_SEARCHES = ["Machine Learning basics", "React hooks", "Python panda
 const spring = { type: "spring", stiffness: 360, damping: 32 };
 
 // ─── NavPill ─────────────────────────────────────────────────────────────────────
-const NavPill = ({ link }) => {
+const NavPill = ({ link, onIntercept }) => {
     const Icon = link.icon;
+
+    // Intercept click on opt-in items (e.g. AI Meeting Recorder) so the
+    // informational popup can show before navigation. If `onIntercept`
+    // returns truthy, the default NavLink navigation is prevented.
+    const handleClick = (e) => {
+        if (link.interceptClick && typeof onIntercept === "function") {
+            const handled = onIntercept(link, e);
+            if (handled) e.preventDefault();
+        }
+    };
+
     return (
-        <NavLink to={link.to} style={{ textDecoration: "none" }}>
+        <NavLink to={link.to} onClick={handleClick} style={{ textDecoration: "none" }}>
             {({ isActive }) => (
                 <motion.div
                     whileHover={{ y: -1 }}
@@ -105,6 +132,32 @@ const NavPill = ({ link }) => {
                     )}
                     <Icon size={14} strokeWidth={isActive ? 2.2 : 1.7} style={{ position: "relative", zIndex: 1, flexShrink: 0 }} />
                     <span style={{ position: "relative", zIndex: 1 }}>{link.label}</span>
+                    {link.premium && (
+                        <span
+                            style={{
+                                position: "relative",
+                                zIndex: 1,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                fontSize: 8.5,
+                                fontWeight: 800,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                                color: "#fff",
+                                background:
+                                    "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
+                                padding: "2px 6px",
+                                borderRadius: 999,
+                                boxShadow: "0 2px 8px rgba(236,72,153,0.4)",
+                                whiteSpace: "nowrap",
+                                marginLeft: 2,
+                            }}
+                        >
+                            <Crown size={8} strokeWidth={2.4} />
+                            Premium
+                        </span>
+                    )}
                     {isActive && (
                         <motion.div
                             layoutId="nav-dot"
@@ -543,7 +596,7 @@ const ProfileDropdown = ({ user, initials, onLogout, onClose }) => {
 };
 
 // ─── MobileMenu ───────────────────────────────────────────────────────────────
-const MobileMenu = ({ user, initials, onLogout, onClose }) => {
+const MobileMenu = ({ user, initials, onLogout, onClose, onIntercept }) => {
     const navigate = useNavigate();
     const go = (to) => { onClose(); navigate(to); };
 
@@ -604,8 +657,15 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                     <p style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: "4px 8px 10px", fontFamily: "'DM Sans', sans-serif" }}>Navigation</p>
                     {NAV_LINKS.map(link => {
                         const Icon = link.icon;
+                        const handleClick = (e) => {
+                            if (link.interceptClick && typeof onIntercept === "function") {
+                                const handled = onIntercept(link, e);
+                                if (handled) { e.preventDefault(); return; }
+                            }
+                            onClose();
+                        };
                         return (
-                            <NavLink key={link.to} to={link.to} onClick={onClose} style={{ textDecoration: "none", display: "block" }}>
+                            <NavLink key={link.to} to={link.to} onClick={handleClick} style={{ textDecoration: "none", display: "block" }}>
                                 {({ isActive }) => (
                                     <motion.div
                                         whileHover={{ x: 3 }}
@@ -622,6 +682,22 @@ const MobileMenu = ({ user, initials, onLogout, onClose }) => {
                                     >
                                         <Icon size={16} strokeWidth={isActive ? 2.2 : 1.7} />
                                         <span style={{ fontSize: 13.5, fontWeight: isActive ? 600 : 400, fontFamily: "'DM Sans', sans-serif" }}>{link.label}</span>
+                                        {link.premium && (
+                                            <span style={{
+                                                marginLeft: "auto",
+                                                display: "inline-flex", alignItems: "center", gap: 3,
+                                                fontSize: 9, fontWeight: 800,
+                                                letterSpacing: "0.08em", textTransform: "uppercase",
+                                                color: "#fff",
+                                                background: "linear-gradient(135deg,#f59e0b 0%,#ec4899 100%)",
+                                                padding: "2px 7px", borderRadius: 999,
+                                                boxShadow: "0 2px 8px rgba(236,72,153,0.4)",
+                                                whiteSpace: "nowrap",
+                                            }}>
+                                                <Crown size={9} strokeWidth={2.4} />
+                                                Premium
+                                            </span>
+                                        )}
                                     </motion.div>
                                 )}
                             </NavLink>
@@ -708,6 +784,12 @@ const Header = ({ toggleSidebar }) => {
     const [profileOpen, setProfileOpen] = useState(false);
     const [mobileMenu,  setMobileMenu]  = useState(false);
 
+    // AI Meeting Recorder — informational Premium popup (shown only the
+    // first time the user clicks the new tab; subsequent clicks navigate
+    // directly). Owned at the Header level so both the desktop pill nav
+    // and the mobile drawer route through the same popup instance.
+    const meetingRecorderPopup = usePremiumPopup();
+
     const notifRef   = useRef(null);
     const profileRef = useRef(null);
 
@@ -724,6 +806,32 @@ const Header = ({ toggleSidebar }) => {
     }, []);
 
     const handleLogout = useCallback(() => { logout(); navigate("/login"); }, [logout, navigate]);
+
+    // Hook for nav items flagged with `interceptClick`. Returning `true`
+    // signals NavPill / MobileMenu to call e.preventDefault(). The popup
+    // is shown ONLY the first time; subsequent clicks navigate directly.
+    const handleNavIntercept = useCallback((link) => {
+        if (link.to === MEETING_RECORDER_ROUTE) {
+            return meetingRecorderPopup.requestOpen(() => {
+                setMobileMenu(false);
+                navigate(MEETING_RECORDER_ROUTE);
+            });
+        }
+        return false;
+    }, [meetingRecorderPopup, navigate]);
+
+    // "Continue" → mark as seen and navigate to the recorder page.
+    const handlePopupContinue = useCallback(() => {
+        meetingRecorderPopup.dismiss();
+        setMobileMenu(false);
+        navigate(MEETING_RECORDER_ROUTE);
+    }, [meetingRecorderPopup, navigate]);
+
+    // "Maybe Later" / Escape / overlay click → just close, do NOT set the
+    // seen flag so the popup re-appears next time. Matches the spec.
+    const handlePopupMaybeLater = useCallback(() => {
+        meetingRecorderPopup.close();
+    }, [meetingRecorderPopup]);
 
     const initials = (user?.username || "U")
         .split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -817,7 +925,13 @@ const Header = ({ toggleSidebar }) => {
                             flex: 1, display: "flex", alignItems: "center",
                             justifyContent: "center", gap: 1,
                         }}>
-                            {NAV_LINKS.map(link => <NavPill key={link.to} link={link} />)}
+                            {NAV_LINKS.map(link => (
+                                <NavPill
+                                    key={link.to}
+                                    link={link}
+                                    onIntercept={handleNavIntercept}
+                                />
+                            ))}
                         </nav>
                     )}
 
@@ -956,9 +1070,17 @@ const Header = ({ toggleSidebar }) => {
                         initials={initials}
                         onLogout={handleLogout}
                         onClose={() => setMobileMenu(false)}
+                        onIntercept={handleNavIntercept}
                     />
                 )}
             </AnimatePresence>
+
+            {/* ── AI Meeting Recorder — informational Premium popup ── */}
+            <PremiumInfoPopup
+                isOpen={meetingRecorderPopup.isOpen}
+                onContinue={handlePopupContinue}
+                onMaybeLater={handlePopupMaybeLater}
+            />
         </>
     );
 };
