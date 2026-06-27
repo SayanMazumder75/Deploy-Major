@@ -52,7 +52,7 @@ import {
     renderSummaryPdf,
     estimateSummaryPageCount,
 } from '../utils/summaryPdfBuilder.js';
-import { rawGenerate } from '../utils/geminiService.js';
+import { rawGenerate } from '../utils/groqIntelligenceClient.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

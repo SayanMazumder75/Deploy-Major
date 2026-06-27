@@ -32,18 +32,27 @@ const fileFilter = (req, file, cb) => {
 };
 
 // Configure multer
-// Default max upload size = 100 MB. This is intentionally generous because
-// the AI Document Intelligence module is built to summarise large textbooks
-// and reference PDFs which routinely exceed 10 MB. The limit can be tuned
-// without a code change by setting MAX_FILE_SIZE in the backend env (value
-// is in bytes: 1 MB ≈ 1,048,576 bytes).
-const DEFAULT_MAX_FILE_SIZE = 104857600; // 100 MB
+//
+// Max upload size = 100 MB, hardcoded. We previously read this from a
+// MAX_FILE_SIZE env var with a 100 MB code default, but in practice that
+// proved fragile: a stale env value set to the old 10 MB limit silently
+// overrode the new default and produced misleading error messages.
+// Hardcoding here makes the limit a property of the deployed code (which
+// is reviewed in PRs and tested before shipping) rather than of the
+// per-environment config. If we ever genuinely need a smaller limit in a
+// specific environment, reintroduce an env override here behind a more
+// explicit name like UPLOAD_MAX_FILE_SIZE.
+const MAX_FILE_SIZE = 104857600; // 100 MB
 const upload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-        fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || DEFAULT_MAX_FILE_SIZE
+        fileSize: MAX_FILE_SIZE
     }
 });
+
+// Re-exported so other modules (e.g. errorHandler) can render the limit
+// in user-facing messages without reaching into multer internals.
+export const MAX_UPLOAD_FILE_SIZE = MAX_FILE_SIZE;
 
 export default upload;
