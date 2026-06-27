@@ -1,3 +1,5 @@
+import { MAX_UPLOAD_FILE_SIZE } from '../config/multer.js';
+
 const errorhandler = (err, req, res, next) =>{
     let statusCode = err.statusCode || 500;
     let message = err.message || 'Server Error';
@@ -21,12 +23,10 @@ const errorhandler = (err, req, res, next) =>{
         statusCode = 400;
     }
 
-    //multer file size error — read the active limit from env so the user-
-    //facing message always matches the configured limit. We render in MB
-    //for readability (1 MB = 1,048,576 bytes).
+    //multer file size error — the limit comes from multer's config so the
+    //error message and the actual enforced limit can never drift apart.
     if (err.code === 'LIMIT_FILE_SIZE'){
-        const limitBytes = parseInt(process.env.MAX_FILE_SIZE, 10) || 104857600;
-        const limitMb = Math.round(limitBytes / (1024 * 1024));
+        const limitMb = Math.round(MAX_UPLOAD_FILE_SIZE / (1024 * 1024));
         message = `File size exceeds the maximum limit of ${limitMb}MB`;
         statusCode = 400;
     }
