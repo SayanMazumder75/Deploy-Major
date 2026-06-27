@@ -23,7 +23,7 @@
 // canonical Groq wrapper for this codebase.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { rawGenerate } from './geminiService.js';
+import { rawGenerate } from './groqIntelligenceClient.js';
 
 // Target words PER PAGE for converting "summaryLength" (2/5/10 pages) into a
 // concrete output-size budget. Loosely calibrated against a normal printed
