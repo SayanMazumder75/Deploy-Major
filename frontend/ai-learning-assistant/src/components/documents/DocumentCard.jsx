@@ -5,7 +5,8 @@ import {
   Trash2,
   BookOpen,
   BrainCircuit,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import moment from 'moment';
 
@@ -70,6 +71,22 @@ const DocumentCard = ({ document, onDelete }) => {
         </button>
 
       </div>
+
+      {/* AI Generated badge — only shown for documents created by the
+          AI Document Intelligence "Save to Documents" flow. Anchored to the
+          top-right of the card so it's always visible without clashing with
+          the hover-only delete button (the delete only appears on hover
+          while the badge stays visible).
+
+          We keep the badge OUT of the header flex row so its absolute
+          positioning never affects the icon / title layout for regular
+          (non-AI-generated) documents. */}
+      {document.aiGenerated && (
+        <div className="absolute top-3 right-3 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-[10px] font-bold tracking-wide shadow shadow-purple-500/40 z-10 group-hover:opacity-0 transition-opacity">
+          <Sparkles className="w-3 h-3" strokeWidth={2.4} />
+          AI Generated
+        </div>
+      )}
 
       {/* Title */}
       <h3

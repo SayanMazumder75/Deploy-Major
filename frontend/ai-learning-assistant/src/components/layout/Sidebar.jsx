@@ -15,6 +15,7 @@ import {
     BrainCircuit,
     Mic,
     Radio,
+    Sparkles,
     X,
     ChevronLeft,
     ChevronRight,
@@ -32,6 +33,7 @@ const MEETING_RECORDER_ROUTE = "/meeting-recorder";
 const NAV_LINKS = [
     { to: "/dashboard",         icon: LayoutDashboard, text: "Dashboard"            },
     { to: "/documents",         icon: FileText,        text: "Documents"            },
+    { to: "/ai-intelligence",   icon: Sparkles,        text: "AI Document Intelligence" },
     { to: "/flashcards",        icon: BookOpen,        text: "Flashcards"           },
     { to: "/study-vault",       icon: Brain,           text: "Study Vault"          },
     { to: "/meeting-assistant", icon: Mic,             text: "AI Meeting Assistant" },
