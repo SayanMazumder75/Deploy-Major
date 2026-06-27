@@ -16,6 +16,7 @@ import quizRoutes from './routes/quizRoutes.js';
 import progressRoutes from './routes/progressRoutes.js';
 
 import calendarRoutes from './routes/calendarRoutes.js';
+import aiIntelligenceRoutes from './routes/aiIntelligenceRoutes.js';
 
 
 // ES6 module __dirname alternative
@@ -73,6 +74,9 @@ app.use('/api/ai', aiRoutes)
 app.use('/api/quizzes', quizRoutes)
 app.use('/api/progress', progressRoutes)
 app.use('/api/calendar', calendarRoutes);
+// AI Document Intelligence — preview-before-save summaries with rich
+// generation pipeline, history, viewer, and Documents integration.
+app.use('/api/ai-intelligence', aiIntelligenceRoutes);
 
 
 

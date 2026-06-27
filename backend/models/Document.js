@@ -62,6 +62,22 @@ const documentSchema = new mongoose.Schema({
         type: String,
         enum: ['processing', 'ready', 'failed'],
         default: 'processing'
+    },
+    // ── AI-generated documents (AI Document Intelligence "Save to Documents")
+    // When a user generates a summary in the AI Intelligence module and then
+    // clicks "Save to Documents", we render a PDF, upload it to Cloudinary,
+    // and create a Document record with `aiGenerated: true` plus a back-ref
+    // to the originating AISummary. Both fields are optional / default-false
+    // so regular uploads are completely unaffected. The Documents page uses
+    // these to show an "AI Generated" badge on the card.
+    aiGenerated: {
+        type: Boolean,
+        default: false
+    },
+    aiSummaryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AISummary',
+        default: null
     }
 }, {
     timestamps: true

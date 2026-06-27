@@ -18,6 +18,11 @@ const MeetingAssistantPage = React.lazy(() => import('./pages/MeetingAssistant/M
 // without the Quick-Start onboarding section). The full recorder app lives at
 // VITE_MEETING_RECORDER_URL.
 const MeetingRecorderDashboardPage = React.lazy(() => import('./features/meetingRecorder/pages/MeetingRecorderDashboardPage'));
+// AI Document Intelligence — premium summary pipeline with preview-before-save
+// semantics. Lazy-loaded to keep the main bundle lean (uses framer-motion +
+// markdown + speech-synthesis under the hood).
+const AIIntelligencePage = React.lazy(() => import('./pages/AIIntelligence/AIIntelligencePage'));
+const AISummaryViewerPage = React.lazy(() => import('./pages/AIIntelligence/AISummaryViewerPage'));
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
 import StudyVaultPage from "./pages/StudyVault/StudyVaultPage";
@@ -61,6 +66,9 @@ const App = () => {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/study-vault" element={<StudyVaultPage />} />
           <Route path="/calendar" element={<StudyCalendarPage />} />
+          {/* AI Document Intelligence — preview-before-save summaries */}
+          <Route path="/ai-intelligence" element={<AIIntelligencePage />} />
+          <Route path="/ai-intelligence/:id" element={<AISummaryViewerPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

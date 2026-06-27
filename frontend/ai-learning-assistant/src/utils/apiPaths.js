@@ -84,4 +84,19 @@ export const API_PATHS = {
     GET_ANALYTICS: '/api/calendar/analytics',
 },
 
+    // AI Document Intelligence — preview-before-save summary pipeline. All
+    // endpoints are mounted on the backend under /api/ai-intelligence and
+    // require JWT auth (handled transparently by axiosInstance).
+    AI_INTELLIGENCE: {
+        GENERATE: '/api/ai-intelligence/generate',
+        HISTORY: '/api/ai-intelligence/history',
+        GET_BY_ID: (id) => `/api/ai-intelligence/${id}`,
+        DELETE: (id) => `/api/ai-intelligence/${id}`,
+        REGENERATE: (id) => `/api/ai-intelligence/${id}/regenerate`,
+        DOWNLOAD: (id) => `/api/ai-intelligence/${id}/download`,
+        SAVE_TO_DOCUMENTS: (id) => `/api/ai-intelligence/${id}/save-to-documents`,
+        ASK: (id) => `/api/ai-intelligence/${id}/ask`,
+        TRANSLATE: (id) => `/api/ai-intelligence/${id}/translate`,
+    },
+
 };
