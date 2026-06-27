@@ -271,7 +271,7 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
                                         or drag and drop
                                     </p>
                                     <p className="text-[11px] text-purple-500/80">
-                                        PDF up to 10MB · Will not appear in Documents until you
+                                        PDF up to 100MB · Will not appear in Documents until you
                                         save it
                                     </p>
                                 </label>
