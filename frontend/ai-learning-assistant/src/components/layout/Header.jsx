@@ -64,6 +64,10 @@ const PREMIUM_ITEMS = [
         icon: Sparkles,
         label: "AI Document Intelligence",
         description: "Generate study-ready summaries from PDFs",
+        // The newest premium feature gets a small "NEW" ribbon in the
+        // dropdown so users notice it on first visit. Remove the flag
+        // when it stops being new (and a new one arrives).
+        isNew: true,
     },
 ];
 
@@ -216,6 +220,11 @@ const PremiumDropdown = ({ items, onIntercept }) => {
     );
     const showPillBg = isActive || open;
 
+    // Pulse a small NEW-indicator dot on the trigger if any item is flagged
+    // as new and the dropdown hasn't been opened yet. Once the user opens
+    // the dropdown we stop pulsing — they've seen it.
+    const hasUnseenNew = items.some((i) => i.isNew) && !open;
+
     const handleItemClick = (item, e) => {
         e.preventDefault();
         setOpen(false);
@@ -310,6 +319,33 @@ const PremiumDropdown = ({ items, onIntercept }) => {
                             height: 3,
                             borderRadius: "50%",
                             background: "rgba(251,191,36,0.85)",
+                        }}
+                    />
+                )}
+                {hasUnseenNew && !isActive && (
+                    <motion.span
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{
+                            opacity: [0.6, 1, 0.6],
+                            scale: [1, 1.25, 1],
+                        }}
+                        transition={{
+                            duration: 1.8,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                        }}
+                        style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            width: 7,
+                            height: 7,
+                            borderRadius: "50%",
+                            background:
+                                "radial-gradient(circle, #ec4899 0%, #a855f7 70%)",
+                            boxShadow: "0 0 8px rgba(236,72,153,0.7)",
+                            pointerEvents: "none",
+                            zIndex: 2,
                         }}
                     />
                 )}
@@ -441,17 +477,41 @@ const PremiumDropdown = ({ items, onIntercept }) => {
                                             <Icon size={15} color="#fbbf24" strokeWidth={1.9} />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <p
-                                                style={{
-                                                    color: "#fff",
-                                                    fontSize: 13,
-                                                    fontWeight: 600,
-                                                    margin: 0,
-                                                    lineHeight: 1.2,
-                                                }}
-                                            >
-                                                {item.label}
-                                            </p>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                <p
+                                                    style={{
+                                                        color: "#fff",
+                                                        fontSize: 13,
+                                                        fontWeight: 600,
+                                                        margin: 0,
+                                                        lineHeight: 1.2,
+                                                    }}
+                                                >
+                                                    {item.label}
+                                                </p>
+                                                {item.isNew && (
+                                                    <span
+                                                        style={{
+                                                            display: "inline-flex",
+                                                            alignItems: "center",
+                                                            fontSize: 9,
+                                                            fontWeight: 800,
+                                                            letterSpacing: "0.08em",
+                                                            textTransform: "uppercase",
+                                                            color: "#fff",
+                                                            background:
+                                                                "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)",
+                                                            padding: "2px 6px",
+                                                            borderRadius: 999,
+                                                            boxShadow:
+                                                                "0 2px 8px rgba(168,85,247,0.5)",
+                                                            lineHeight: 1,
+                                                        }}
+                                                    >
+                                                        NEW
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p
                                                 style={{
                                                     color: "rgba(255,255,255,0.42)",
@@ -1061,11 +1121,25 @@ const MobileMenu = ({ user, initials, onLogout, onClose, onIntercept }) => {
                                             <Icon size={14} color="#fbbf24" strokeWidth={1.9} />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <p style={{
-                                                fontSize: 13.5, margin: 0,
-                                                fontWeight: isActive ? 600 : 500,
-                                                fontFamily: "'DM Sans', sans-serif",
-                                            }}>{link.label}</p>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                <p style={{
+                                                    fontSize: 13.5, margin: 0,
+                                                    fontWeight: isActive ? 600 : 500,
+                                                    fontFamily: "'DM Sans', sans-serif",
+                                                }}>{link.label}</p>
+                                                {link.isNew && (
+                                                    <span style={{
+                                                        display: "inline-flex", alignItems: "center",
+                                                        fontSize: 9, fontWeight: 800,
+                                                        letterSpacing: "0.08em", textTransform: "uppercase",
+                                                        color: "#fff",
+                                                        background: "linear-gradient(135deg,#a855f7 0%,#ec4899 100%)",
+                                                        padding: "2px 6px", borderRadius: 999,
+                                                        boxShadow: "0 2px 8px rgba(168,85,247,0.5)",
+                                                        lineHeight: 1,
+                                                    }}>NEW</span>
+                                                )}
+                                            </div>
                                             {link.description && (
                                                 <p style={{
                                                     fontSize: 10.5, margin: "1px 0 0",
