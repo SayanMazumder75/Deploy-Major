@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useTheme } from "../../context/ThemeContext.jsx";
@@ -32,12 +32,13 @@ const useOutsideClick = (ref, cb) => {
 };
 
 // ─── constants ─────────────────────────────────────────────────────────────────
-// Items can opt-in to a small "Premium" pill and a click-intercept so they
-// show an informational popup before navigating. The popup itself is owned
-// by the Header (see usePremiumPopup) and is purely informational — it
-// never blocks access. Auth / subscription gating can later be wired into
-// the same intercept point without touching the link list.
+// The regular nav lives in NAV_LINKS. Premium-tier features have been pulled
+// out into PREMIUM_ITEMS and are surfaced via a dedicated "Premium" dropdown
+// in the centre of the header (see PremiumDropdown below). This keeps the
+// header clean as we add more premium tools — instead of every new feature
+// claiming its own pill, they all live behind the single Premium entry.
 const MEETING_RECORDER_ROUTE = "/meeting-recorder";
+const AI_INTELLIGENCE_ROUTE = "/ai-intelligence";
 
 const NAV_LINKS = [
     { to: "/dashboard",          icon: LayoutDashboard, label: "Dashboard"            },
@@ -45,12 +46,24 @@ const NAV_LINKS = [
     { to: "/flashcards",         icon: BookOpen,          label: "Flashcards"           },
     { to: "/study-vault",        icon: Brain,             label: "Study Vault"          },
     { to: "/meeting-assistant",  icon: Mic,               label: "AI Meeting Assistant" },
+];
+
+// Premium dropdown items. `interceptClick: true` triggers the first-visit
+// informational popup before navigating (used by Meeting Recorder only —
+// AI Document Intelligence navigates straight through).
+const PREMIUM_ITEMS = [
     {
         to: MEETING_RECORDER_ROUTE,
         icon: Radio,
         label: "AI Meeting Recorder",
-        premium: true,
+        description: "Record, transcribe, and summarise meetings",
         interceptClick: true,
+    },
+    {
+        to: AI_INTELLIGENCE_ROUTE,
+        icon: Sparkles,
+        label: "AI Document Intelligence",
+        description: "Generate study-ready summaries from PDFs",
     },
 ];
 
@@ -174,6 +187,295 @@ const NavPill = ({ link, onIntercept }) => {
                 </motion.div>
             )}
         </NavLink>
+    );
+};
+
+// ─── PremiumDropdown ─────────────────────────────────────────────────────────
+// Single "Premium" pill in the centre nav that opens a dropdown listing all
+// premium features (AI Meeting Recorder + AI Document Intelligence today).
+// Behaves like a NavPill — same hover effects, same active-state pill — but
+// active-state lights up whenever ANY of its child routes is current.
+//
+// The Meeting Recorder item still routes through `onIntercept` so the
+// first-visit informational popup keeps firing exactly as before.
+const PremiumDropdown = ({ items, onIntercept }) => {
+    const [open, setOpen] = useState(false);
+    const dropdownRef = useRef(null);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useOutsideClick(dropdownRef, () => setOpen(false));
+
+    // Active when the current route matches any premium item. This is what
+    // makes the pill highlight when you're sitting on /meeting-recorder or
+    // /ai-intelligence — visually consistent with the rest of the nav.
+    const isActive = items.some((item) =>
+        item.to === "/"
+            ? location.pathname === "/"
+            : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+    );
+    const showPillBg = isActive || open;
+
+    const handleItemClick = (item, e) => {
+        e.preventDefault();
+        setOpen(false);
+        // Intercept = show premium-info popup before navigating (Recorder only).
+        if (item.interceptClick && typeof onIntercept === "function") {
+            const handled = onIntercept(item, e);
+            if (handled) return; // intercept owns navigation
+        }
+        navigate(item.to);
+    };
+
+    return (
+        <div ref={dropdownRef} style={{ position: "relative" }}>
+            <motion.button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                style={{
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "7px 13px",
+                    borderRadius: 10,
+                    color: showPillBg ? "#fff" : "rgba(255,255,255,0.5)",
+                    fontSize: 13,
+                    fontWeight: isActive ? 600 : 450,
+                    fontFamily: "'DM Sans', sans-serif",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    letterSpacing: isActive ? "0.01em" : "0",
+                    transition: "color 0.18s",
+                    whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => {
+                    if (!showPillBg) e.currentTarget.style.color = "rgba(255,255,255,0.8)";
+                }}
+                onMouseLeave={(e) => {
+                    if (!showPillBg) e.currentTarget.style.color = "rgba(255,255,255,0.5)";
+                }}
+            >
+                {showPillBg && (
+                    <motion.div
+                        layoutId="nav-pill-bg"
+                        transition={spring}
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: 10,
+                            // Amber→pink premium gradient — distinct from the
+                            // purple→pink used by regular nav items so the
+                            // user can tell at a glance which tier they're in.
+                            background:
+                                "linear-gradient(135deg, rgba(245,158,11,0.28) 0%, rgba(236,72,153,0.2) 100%)",
+                            border: "1px solid rgba(245,158,11,0.35)",
+                            boxShadow:
+                                "0 0 18px rgba(236,72,153,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
+                        }}
+                    />
+                )}
+                <Crown
+                    size={14}
+                    strokeWidth={2}
+                    color={showPillBg ? "#fbbf24" : "rgba(251,191,36,0.7)"}
+                    style={{ position: "relative", zIndex: 1, flexShrink: 0 }}
+                />
+                <span style={{ position: "relative", zIndex: 1 }}>Premium</span>
+                <motion.span
+                    animate={{ rotate: open ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ position: "relative", zIndex: 1, display: "inline-flex" }}
+                >
+                    <ChevronDown
+                        size={11}
+                        color={showPillBg ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)"}
+                    />
+                </motion.span>
+                {isActive && (
+                    <motion.div
+                        layoutId="nav-dot"
+                        transition={spring}
+                        style={{
+                            position: "absolute",
+                            bottom: 3,
+                            left: "50%",
+                            transform: "translateX(-50%)",
+                            width: 3,
+                            height: 3,
+                            borderRadius: "50%",
+                            background: "rgba(251,191,36,0.85)",
+                        }}
+                    />
+                )}
+            </motion.button>
+
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        role="menu"
+                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                        transition={spring}
+                        style={{
+                            position: "absolute",
+                            top: "calc(100% + 10px)",
+                            left: "50%",
+                            transform: "translateX(-50%)",
+                            width: 300,
+                            background: "rgba(10,3,30,0.98)",
+                            backdropFilter: "blur(32px)",
+                            border: "1px solid rgba(245,158,11,0.25)",
+                            borderRadius: 18,
+                            boxShadow:
+                                "0 0 0 1px rgba(245,158,11,0.08), 0 28px 80px rgba(0,0,0,0.6), 0 0 60px rgba(236,72,153,0.06)",
+                            overflow: "hidden",
+                            zIndex: 200,
+                        }}
+                    >
+                        <div
+                            style={{
+                                height: 1,
+                                background:
+                                    "linear-gradient(90deg, transparent, rgba(245,158,11,0.8), rgba(236,72,153,0.6), transparent)",
+                            }}
+                        />
+                        <div
+                            style={{
+                                padding: "12px 14px 11px",
+                                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <Crown size={13} color="#fbbf24" strokeWidth={2} />
+                                <p
+                                    style={{
+                                        color: "#fff",
+                                        fontSize: 11.5,
+                                        fontWeight: 700,
+                                        margin: 0,
+                                        letterSpacing: "0.12em",
+                                        textTransform: "uppercase",
+                                        fontFamily: "'DM Sans', sans-serif",
+                                    }}
+                                >
+                                    Premium Features
+                                </p>
+                            </div>
+                            <p
+                                style={{
+                                    color: "rgba(255,255,255,0.4)",
+                                    fontSize: 11,
+                                    margin: "3px 0 0",
+                                    fontFamily: "'DM Sans', sans-serif",
+                                }}
+                            >
+                                Advanced AI-powered tools
+                            </p>
+                        </div>
+                        <div style={{ padding: "6px 8px 10px" }}>
+                            {items.map((item) => {
+                                const Icon = item.icon;
+                                const itemActive =
+                                    location.pathname === item.to ||
+                                    location.pathname.startsWith(`${item.to}/`);
+                                return (
+                                    <motion.button
+                                        key={item.to}
+                                        role="menuitem"
+                                        type="button"
+                                        onClick={(e) => handleItemClick(item, e)}
+                                        whileHover={{ x: 3 }}
+                                        style={{
+                                            width: "100%",
+                                            background: itemActive
+                                                ? "rgba(245,158,11,0.1)"
+                                                : "transparent",
+                                            border: itemActive
+                                                ? "1px solid rgba(245,158,11,0.25)"
+                                                : "1px solid transparent",
+                                            borderRadius: 12,
+                                            padding: "10px 10px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 11,
+                                            color: "rgba(255,255,255,0.72)",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                            transition: "background 0.15s, border-color 0.15s",
+                                            fontFamily: "'DM Sans', sans-serif",
+                                            marginBottom: 2,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (!itemActive)
+                                                e.currentTarget.style.background =
+                                                    "rgba(245,158,11,0.07)";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (!itemActive)
+                                                e.currentTarget.style.background = "transparent";
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                width: 36,
+                                                height: 36,
+                                                borderRadius: 10,
+                                                flexShrink: 0,
+                                                background:
+                                                    "linear-gradient(135deg, rgba(245,158,11,0.2), rgba(236,72,153,0.18))",
+                                                border: "1px solid rgba(245,158,11,0.3)",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                boxShadow:
+                                                    "0 4px 12px rgba(236,72,153,0.15), inset 0 1px 0 rgba(255,255,255,0.08)",
+                                            }}
+                                        >
+                                            <Icon size={15} color="#fbbf24" strokeWidth={1.9} />
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p
+                                                style={{
+                                                    color: "#fff",
+                                                    fontSize: 13,
+                                                    fontWeight: 600,
+                                                    margin: 0,
+                                                    lineHeight: 1.2,
+                                                }}
+                                            >
+                                                {item.label}
+                                            </p>
+                                            <p
+                                                style={{
+                                                    color: "rgba(255,255,255,0.42)",
+                                                    fontSize: 11,
+                                                    margin: "3px 0 0",
+                                                    lineHeight: 1.3,
+                                                }}
+                                            >
+                                                {item.description}
+                                            </p>
+                                        </div>
+                                        <ArrowRight
+                                            size={12}
+                                            color="rgba(255,255,255,0.32)"
+                                            style={{ flexShrink: 0 }}
+                                        />
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 };
 
@@ -704,6 +1006,81 @@ const MobileMenu = ({ user, initials, onLogout, onClose, onIntercept }) => {
                         );
                     })}
                 </div>
+
+                {/* ── Premium section ── */}
+                {/* Mirrors the desktop PremiumDropdown: same items, same
+                    intercept hook, but flattened into the mobile drawer as
+                    a labelled section so users don't have to deal with a
+                    nested dropdown on a small screen. */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
+                <div style={{ padding: "12px 10px" }}>
+                    <div style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        margin: "4px 8px 10px",
+                    }}>
+                        <Crown size={10} color="#fbbf24" strokeWidth={2.2} />
+                        <p style={{
+                            fontSize: 10, letterSpacing: "0.14em",
+                            textTransform: "uppercase",
+                            color: "rgba(251,191,36,0.7)",
+                            margin: 0, fontFamily: "'DM Sans', sans-serif",
+                            fontWeight: 700,
+                        }}>Premium</p>
+                    </div>
+                    {PREMIUM_ITEMS.map(link => {
+                        const Icon = link.icon;
+                        const handleClick = (e) => {
+                            if (link.interceptClick && typeof onIntercept === "function") {
+                                const handled = onIntercept(link, e);
+                                if (handled) { e.preventDefault(); return; }
+                            }
+                            onClose();
+                        };
+                        return (
+                            <NavLink key={link.to} to={link.to} onClick={handleClick} style={{ textDecoration: "none", display: "block" }}>
+                                {({ isActive }) => (
+                                    <motion.div
+                                        whileHover={{ x: 3 }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: 12,
+                                            padding: "11px 12px", borderRadius: 12, marginBottom: 2,
+                                            background: isActive ? "rgba(245,158,11,0.18)" : "transparent",
+                                            border: isActive ? "1px solid rgba(245,158,11,0.35)" : "1px solid transparent",
+                                            color: isActive ? "#fff7ed" : "rgba(255,255,255,0.6)",
+                                            cursor: "pointer", transition: "all 0.15s",
+                                        }}
+                                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(245,158,11,0.07)"; }}
+                                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                                    >
+                                        <div style={{
+                                            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                                            background: "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.15))",
+                                            border: "1px solid rgba(245,158,11,0.25)",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                        }}>
+                                            <Icon size={14} color="#fbbf24" strokeWidth={1.9} />
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p style={{
+                                                fontSize: 13.5, margin: 0,
+                                                fontWeight: isActive ? 600 : 500,
+                                                fontFamily: "'DM Sans', sans-serif",
+                                            }}>{link.label}</p>
+                                            {link.description && (
+                                                <p style={{
+                                                    fontSize: 10.5, margin: "1px 0 0",
+                                                    color: "rgba(255,255,255,0.38)",
+                                                    fontFamily: "'DM Sans', sans-serif",
+                                                    lineHeight: 1.25,
+                                                }}>{link.description}</p>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </NavLink>
+                        );
+                    })}
+                </div>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
                 <div style={{ padding: "12px 10px" }}>
                     <p style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: "4px 8px 10px", fontFamily: "'DM Sans', sans-serif" }}>Tools & Account</p>
@@ -932,6 +1309,13 @@ const Header = ({ toggleSidebar }) => {
                                     onIntercept={handleNavIntercept}
                                 />
                             ))}
+                            {/* Premium tools live behind a single dropdown so
+                                we don't keep growing the header pill row as
+                                new premium features land. */}
+                            <PremiumDropdown
+                                items={PREMIUM_ITEMS}
+                                onIntercept={handleNavIntercept}
+                            />
                         </nav>
                     )}
 
