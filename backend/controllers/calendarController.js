@@ -8,6 +8,8 @@ import VivaSession from '../models/VivaSession.js';
 // import VivaSession from '../models/VivaSession.js';
 import * as geminiService from '../utils/geminiService.js';
 // import axios from 'axios';
+import User from "../models/User.js";
+import { sendReminderEmail } from "../utils/sendEmail.js";
 
 const ML_API_URL = process.env.ML_API_URL || 'http://localhost:5001';
 
@@ -40,7 +42,21 @@ export const createSession = async (req, res, next) => {
             duration: duration || 60, priority, color, notes
         });
 
-        res.status(201).json({ success: true, data: session });
+        const user = await User.findById(req.user._id);
+
+if (user?.email) {
+    await sendReminderEmail(
+        user.email,
+        session.title,
+        session.date,
+        session.startTime
+    );
+}
+
+res.status(201).json({
+    success: true,
+    data: session
+});
     } catch (error) { next(error); }
 };
 

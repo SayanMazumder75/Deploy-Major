@@ -2,6 +2,7 @@
   "dependencies": {
     "crypto": "^1.0.1",
     "framer-motion": "^12.40.0",
-    "nodemailer": "^9.0.0"
+    "node-cron": "^4.5.0",
+    "nodemailer": "^9.0.1"
   }
 }

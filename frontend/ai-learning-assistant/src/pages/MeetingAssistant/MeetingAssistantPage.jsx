@@ -30,7 +30,7 @@ const LS_KEY = "meetmind_guide_closed";
 // ⚠️ SET THIS to your exact Speech App domain (no trailing slash)
 // Must match VITE_MEETMIND_ORIGIN in Speech App's .env
 const SPEECH_APP_ORIGIN = import.meta.env.VITE_SPEECH_APP_ORIGIN || "https://live-ten-ebon.vercel.app/";
-const SPEECH_APP_URL = "https://live-ten-ebon.vercel.app/";
+const SPEECH_APP_URL = "https://live-ten-ebon.vercel.app";
 
 // ─── step card ─────────────────────────────────────────────────────────────────
 const StepCard = ({ s }) => (
@@ -178,42 +178,51 @@ const MeetingAssistantPage = () => {
    * Token is read from MeetMind's localStorage (set on login/register).
    * Targeted to exact SPEECH_APP_ORIGIN — never uses "*".
    */
-  const handleIframeLoad = () => {
-    setIframeLoaded(true);
+  const sendTokenToIframe = () => {
+  try {
+    const token = localStorage.getItem("token");
 
-    try {
-      const token = localStorage.getItem("token"); // MeetMind JWT key
-      if (token && iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          { type: "MEETMIND_AUTH", token },
-          SPEECH_APP_ORIGIN // ← strict origin, NOT "*"
-        );
-        console.log("[MeetMind] JWT sent to Speech App iframe.");
-      } else {
-        console.warn("[MeetMind] No token found in localStorage — user may not be logged in.");
-      }
-    } catch (err) {
-      console.error("[MeetMind] postMessage failed:", err);
+    console.log("MeetMind Token:", token);
+
+    if (token && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: "MEETMIND_AUTH",
+          token,
+        },
+        SPEECH_APP_ORIGIN
+      );
+
+      console.log("[MeetMind] JWT sent to Speech App iframe.");
+    } else {
+      console.warn(
+        "[MeetMind] Token missing or iframe not ready."
+      );
     }
-  };
+  } catch (err) {
+    console.error("[MeetMind] postMessage failed:", err);
+  }
+};
+
+const handleIframeLoad = () => {
+  setIframeLoaded(true);
+
+  // wait a little to ensure iframe scripts are ready
+  setTimeout(() => {
+    sendTokenToIframe();
+  }, 1000);
+};
 
   /**
    * Re-send token if iframe ref is available but iframe was already loaded
    * before ref was attached (edge case with hot reload / strict mode).
    */
+  
   useEffect(() => {
-    if (iframeLoaded && iframeRef.current?.contentWindow) {
-      try {
-        const token = localStorage.getItem("token");
-        if (token) {
-          iframeRef.current.contentWindow.postMessage(
-            { type: "MEETMIND_AUTH", token },
-            SPEECH_APP_ORIGIN
-          );
-        }
-      } catch {}
-    }
-  }, [iframeLoaded]);
+  if (iframeLoaded) {
+    sendTokenToIframe();
+  }
+}, [iframeLoaded]);
 
   return (
     <div className="min-h-full w-full px-0 pb-2 md:pb-0">
