@@ -1,13 +1,15 @@
-// flashcardService
+// flashcardService (V3)
 //
-// Bundle stage: generate active-recall flashcards FROM the polished
-// chapter summaries (NOT from the raw source text — using the already-
-// summarised content keeps cards focused on the high-yield material).
+// Bundle stage — generates active-recall flashcards from the REWRITTEN
+// chapter summaries. ONE AI call total per generation (V2 also did this in
+// one call, but it imported the unscoped generateJson; V3 threads the
+// scoped Intelligence chain through so per-generation provider health is
+// respected — if Groq got disabled during chunk extraction, this call
+// automatically falls through to OpenRouter without retrying Groq).
 //
 // Returns an array of `{ question, answer, difficulty }` objects. Difficulty
 // is normalised to easy / medium / hard.
 
-import { generateJson } from '../providers/index.js';
 import { safeParseJson, ensureArray } from './shared/jsonParser.js';
 import { flashcardsPrompt } from './shared/promptTemplates.js';
 
@@ -20,13 +22,19 @@ const normaliseDifficulty = (v) =>
  * @param {Object} args
  * @param {Array<{title:string,content:string}>} args.chapters
  * @param {Object} args.settings
- * @param {number} [args.count]  Default 12 — tuneable per call site.
+ * @param {number} [args.count]                        Default 12.
+ * @param {{ generateJson: Function }} args.chain      Scoped intelligence chain.
  * @returns {Promise<Array<{question:string,answer:string,difficulty:string}>>}
  */
-export const generateFlashcards = async ({ chapters, settings, count = 12 }) => {
+export const generateFlashcards = async ({
+    chapters,
+    settings,
+    count = 12,
+    chain,
+}) => {
     if (!chapters?.length) return [];
     try {
-        const raw = await generateJson(
+        const raw = await chain.generateJson(
             flashcardsPrompt({ chapters, settings, count }),
             { label: 'flashcards', maxTokens: 4096, temperature: 0.6 }
         );

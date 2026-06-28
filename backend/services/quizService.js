@@ -1,15 +1,10 @@
-// quizService
+// quizService (V3)
 //
-// Bundle stage: generate a multiple-choice quiz from the polished chapter
-// summaries. Each question has 4 options + correctIndex + correctAnswer
-// (kept redundantly so the frontend can render either by index or by
-// exact-string lookup without re-deriving) + explanation + difficulty.
-//
-// Defensive validation: any question missing exactly 4 options or with an
-// out-of-range correctIndex is dropped, since rendering them would be
-// confusing.
+// Bundle stage — generates an MCQ practice quiz from the rewritten chapter
+// summaries. ONE AI call total per generation. Receives the scoped
+// Intelligence chain from the orchestrator so per-generation provider
+// health is respected.
 
-import { generateJson } from '../providers/index.js';
 import { safeParseJson, ensureArray } from './shared/jsonParser.js';
 import { quizPrompt } from './shared/promptTemplates.js';
 
@@ -18,10 +13,15 @@ const normaliseDifficulty = (v) =>
         ? v.toLowerCase()
         : 'medium';
 
-export const generateQuiz = async ({ chapters, settings, count = 8 }) => {
+export const generateQuiz = async ({
+    chapters,
+    settings,
+    count = 8,
+    chain,
+}) => {
     if (!chapters?.length) return [];
     try {
-        const raw = await generateJson(
+        const raw = await chain.generateJson(
             quizPrompt({ chapters, settings, count }),
             { label: 'quiz', maxTokens: 4096, temperature: 0.5 }
         );
@@ -37,8 +37,10 @@ export const generateQuiz = async ({ chapters, settings, count = 8 }) => {
             )
             .slice(0, count)
             .map((q) => {
-                // Trust correctIndex if it's in range; otherwise derive from
-                // correctAnswer's text match against options.
+                // Trust correctIndex if it's in range; otherwise derive
+                // from correctAnswer's text match against options. Failing
+                // both, default to 0 — never undefined, so the UI can
+                // always render *something*.
                 let correctIndex =
                     typeof q.correctIndex === 'number' &&
                     q.correctIndex >= 0 &&
@@ -53,7 +55,7 @@ export const generateQuiz = async ({ chapters, settings, count = 8 }) => {
                     );
                     if (idx !== -1) correctIndex = idx;
                 }
-                if (correctIndex === -1) correctIndex = 0; // never undefined
+                if (correctIndex === -1) correctIndex = 0;
                 return {
                     question: String(q.question).trim(),
                     options: q.options.map((o) => String(o).trim()),

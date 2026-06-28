@@ -1,38 +1,38 @@
-// mindmapService
+// mindmapService (V3)
 //
-// Bundle stage: generate a Mermaid mindmap representing the structure of
-// the chapters. Returns both:
-//   - `mermaid`: Mermaid mindmap syntax (rendered client-side by mermaid.js)
-//   - `outlineMarkdown`: same content as nested markdown bullets (used as
-//                        a fallback for the PDF builder, which can't run
-//                        the Mermaid renderer)
+// Bundle stage — generates a Mermaid mindmap from the rewritten chapter
+// summaries. ONE AI call per generation via the scoped Intelligence chain.
 //
-// Defensive: if the AI emits Mermaid that doesn't start with `mindmap`, we
-// repair it. Mermaid is strict about the first non-whitespace line.
+// Returns { mermaid, outlineMarkdown }:
+//   - mermaid:         valid Mermaid mindmap syntax, rendered client-side
+//                      by mermaid.js in the Summary Viewer
+//   - outlineMarkdown: same structure as nested markdown bullets — used by
+//                      the PDF builder (which can't run the Mermaid
+//                      renderer) and as a fallback if the SVG render fails
 
-import { generateJson } from '../providers/index.js';
 import { safeParseJson } from './shared/jsonParser.js';
 import { mindmapPrompt } from './shared/promptTemplates.js';
 
 const sanitiseMermaid = (m) => {
     if (!m || typeof m !== 'string') return '';
     let trimmed = m.trim();
-    // Strip ```mermaid fences if the AI included them despite being asked not to.
+    // Strip ```mermaid fences if the AI included them despite being told not to.
     const fence = trimmed.match(/^```(?:mermaid)?\s*([\s\S]*?)```$/);
     if (fence) trimmed = fence[1].trim();
-    // Ensure it starts with the `mindmap` directive.
+    // Mermaid is strict about the first non-whitespace line; force the
+    // `mindmap` directive if the model dropped it.
     if (!/^mindmap\b/.test(trimmed)) {
         trimmed = `mindmap\n${trimmed}`;
     }
     return trimmed;
 };
 
-export const generateMindMap = async ({ chapters, settings }) => {
+export const generateMindMap = async ({ chapters, settings, chain }) => {
     if (!chapters?.length) {
         return { mermaid: '', outlineMarkdown: '' };
     }
     try {
-        const raw = await generateJson(
+        const raw = await chain.generateJson(
             mindmapPrompt({ chapters, settings }),
             { label: 'mindmap', maxTokens: 2048, temperature: 0.5 }
         );

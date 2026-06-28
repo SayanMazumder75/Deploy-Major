@@ -1,66 +1,89 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// summaryService
+// summaryService (V3)
 //
-// Stage 1 (per-chunk extraction) + stage 2 (final aggregation pass).
-// Consumes the provider chain (generateJson) for both.
+// Two responsibilities:
+//   1. extractChunk()          — single AI call per chunk returning a
+//                                rich JSON shape (chapters + definitions +
+//                                keyConcepts + formulas + examples + tips +
+//                                importantPoints). NO follow-up enrichment
+//                                calls; everything we need ships in this
+//                                one response.
+//   2. mergeChunkResults()     — local-only merge + dedupe. Zero AI calls.
+//   3. rewriteMergedDocument() — the SINGLE polishing pass after merge.
+//                                Improves prose / removes dupes / reorders
+//                                chapters. Must not invent new facts.
 //
-// Per-chunk extraction returns a JSON object with chapter summaries,
-// definitions, formulas, examples, diagrams, concepts, and tips.
-// Aggregation merges + dedupes the per-chunk results and then runs ONE
-// final polish pass to re-order chapters and emit a mind-map outline.
+// V3 dropped the V2 enrichment fan-out (4 extra AI passes for definitions /
+// formulas / examples / tips). Those services have been deleted — the
+// chunk JSON now carries everything those passes used to add, just with a
+// slightly simpler per-resource shape (term + definition vs term +
+// definition + simpleExplanation + analogy + …). The viewer already
+// handles the simpler shape gracefully.
 //
-// All structural defence (safeParseJson, ensureArray, dedupeByTitle) is
-// delegated to /shared/jsonParser so this file stays focused on the AI
-// orchestration.
+// The chain is passed in by the orchestrator so per-generation provider
+// health (NVIDIA-disabled, Groq-disabled, etc.) carries between every
+// call inside a pipeline run.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { generateJson } from '../providers/index.js';
-import { safeParseJson, ensureArray, dedupeByTitle } from './shared/jsonParser.js';
+import {
+    safeParseJson,
+    ensureArray,
+    dedupeByTitle,
+} from './shared/jsonParser.js';
 import {
     perChunkExtractionPrompt,
-    chapterFinalisePrompt,
+    rewriteMergedPrompt,
 } from './shared/promptTemplates.js';
 
-// ─── stage 1 ────────────────────────────────────────────────────────────────
+// ─── stage 1 — per-chunk extraction ─────────────────────────────────────────
 
 const emptyChunkResult = () => ({
-    chapters: [],
+    chapterTitle: '',
+    summary: '',
     definitions: [],
-    concepts: [],
+    keyConcepts: [],
     formulas: [],
     examples: [],
-    diagrams: [],
-    tips: [],
+    examTips: [],
+    importantPoints: [],
 });
 
 /**
- * Extract structured material from a single chunk.
+ * Extract structured material from a single chunk via ONE AI call.
  *
  * @param {Object} args
- * @param {{index:number,text:string}} args.chunk
+ * @param {{index:number, label:string|null, text:string, wordCount:number}} args.chunk
  * @param {Object} args.settings
  * @param {number} args.totalChunks
+ * @param {{ generateJson: Function }} args.chain  Scoped intelligence chain.
  * @returns {Promise<ReturnType<typeof emptyChunkResult>>}
  */
-export const extractChunk = async ({ chunk, settings, totalChunks }) => {
+export const extractChunk = async ({ chunk, settings, totalChunks, chain }) => {
     const prompt = perChunkExtractionPrompt({
         chunk: chunk.text,
         settings,
         chunkIndex: chunk.index,
         totalChunks,
     });
+
     let raw;
     try {
-        raw = await generateJson(prompt, {
+        raw = await chain.generateJson(prompt, {
             label: `chunk-extract[${chunk.index + 1}/${totalChunks}]`,
+            // We keep maxTokens generous so the model doesn't truncate mid-
+            // array on a chunk that happens to be definition-heavy. The
+            // response is still ~10–20× smaller than the prompt for typical
+            // educational PDFs.
             maxTokens: 4096,
             temperature: 0.4,
         });
     } catch (err) {
-        // One bad chunk should never kill the whole summary — log and
-        // continue with an empty contribution from this chunk.
+        // A single chunk failing should never kill the whole pipeline. We
+        // log + return an empty result so downstream merge stages can
+        // proceed; the user gets a slightly shorter summary instead of a
+        // hard error.
         console.error(
-            `chunkExtract ${chunk.index + 1}/${totalChunks} failed:`,
+            `chunk-extract ${chunk.index + 1}/${totalChunks} failed:`,
             err.message
         );
         return emptyChunkResult();
@@ -68,58 +91,94 @@ export const extractChunk = async ({ chunk, settings, totalChunks }) => {
 
     const parsed = safeParseJson(raw) || {};
     return {
-        chapters: ensureArray(parsed.chapters),
+        chapterTitle:
+            (parsed.chapterTitle || chunk.label || `Section ${chunk.index + 1}`).trim() ||
+            `Section ${chunk.index + 1}`,
+        summary: typeof parsed.summary === 'string' ? parsed.summary : '',
         definitions: ensureArray(parsed.definitions),
-        concepts: ensureArray(parsed.concepts),
+        keyConcepts: ensureArray(parsed.keyConcepts),
         formulas: ensureArray(parsed.formulas),
         examples: ensureArray(parsed.examples),
-        diagrams: ensureArray(parsed.diagrams),
-        tips: ensureArray(parsed.tips),
+        examTips: ensureArray(parsed.examTips).filter(
+            (t) => typeof t === 'string' && t.trim()
+        ),
+        importantPoints: ensureArray(parsed.importantPoints).filter(
+            (t) => typeof t === 'string' && t.trim()
+        ),
     };
 };
 
-// ─── merge / dedupe ──────────────────────────────────────────────────────────
+// ─── merge / dedupe (LOCAL — no AI) ─────────────────────────────────────────
 
 /**
- * Merge an array of per-chunk results into a single bag and dedupe each
- * category. Normalises field names so downstream enrichment services
- * always see `{ title, content }` shapes.
+ * Merge per-chunk results into a single bag, deduping each category. The
+ * resulting shapes are what the orchestrator threads into the rewrite
+ * stage and the compose stage. NO AI is involved here — this is pure JS.
+ *
+ * Field normalisation aligns the V3 chunk shape with the rich shapes the
+ * AISummary model + the PDF builder expect (term/definition for defs,
+ * name+expression+variables for formulas, etc.). Extra V2-era fields like
+ * `simpleExplanation` are left empty — the viewer handles that fine.
  */
 export const mergeChunkResults = (chunkResults) => {
-    const out = emptyChunkResult();
-    for (const r of chunkResults) {
-        out.chapters.push(...(r.chapters || []));
+    const out = {
+        // Chapter aggregates: one entry per chunk that produced a non-empty
+        // summary. The rewrite stage will rename and reorder these.
+        chapters: [],
+        definitions: [],
+        keyConcepts: [],
+        formulas: [],
+        examples: [],
+        examTips: [],
+        importantPoints: [],
+    };
+
+    for (let i = 0; i < chunkResults.length; i++) {
+        const r = chunkResults[i] || emptyChunkResult();
+
+        if (r.summary && r.summary.trim()) {
+            out.chapters.push({
+                title: r.chapterTitle || `Section ${i + 1}`,
+                content: r.summary,
+            });
+        }
+
         out.definitions.push(...(r.definitions || []));
-        out.concepts.push(...(r.concepts || []));
+        out.keyConcepts.push(...(r.keyConcepts || []));
         out.formulas.push(...(r.formulas || []));
         out.examples.push(...(r.examples || []));
-        out.diagrams.push(...(r.diagrams || []));
-        out.tips.push(...(r.tips || []));
+        out.examTips.push(...(r.examTips || []));
+        out.importantPoints.push(...(r.importantPoints || []));
     }
 
-    // Normalise to { title, content } and dedupe.
+    // ── normalise + dedupe each category ──────────────────────────────────
+    // Each list converges to `{ title, content, raw? }` so downstream code
+    // (PDF builder, viewer) can treat them uniformly.
+
     out.definitions = dedupeByTitle(
         out.definitions
             .filter((d) => d && (d.term || d.title))
             .map((d) => ({
-                title: d.term || d.title,
-                content: d.definition || d.content || '',
-                raw: d, // preserved for enrichment stage to reuse if useful
+                title: (d.term || d.title || '').trim(),
+                content: (d.definition || d.content || '').trim(),
+                raw: d,
             }))
     );
-    out.concepts = dedupeByTitle(
-        out.concepts
+
+    out.keyConcepts = dedupeByTitle(
+        out.keyConcepts
             .filter((c) => c && c.title)
             .map((c) => ({
-                title: c.title,
-                content: c.explanation || c.content || '',
+                title: c.title.trim(),
+                content: (c.explanation || c.content || '').trim(),
             }))
     );
+
     out.formulas = dedupeByTitle(
         out.formulas
-            .filter((f) => f && (f.name || f.title))
+            .filter((f) => f && (f.name || f.title || f.expression))
             .map((f) => ({
-                title: f.name || f.title,
+                title: (f.name || f.title || 'Formula').trim(),
                 content: [
                     f.expression || '',
                     f.variables ? `Variables: ${f.variables}` : '',
@@ -130,42 +189,57 @@ export const mergeChunkResults = (chunkResults) => {
                 raw: f,
             }))
     );
+
     out.examples = dedupeByTitle(
         out.examples
             .filter((e) => e && e.title)
-            .map((e) => ({ title: e.title, content: e.content || '' }))
-    );
-    out.diagrams = dedupeByTitle(
-        out.diagrams
-            .filter((d) => d && d.title)
-            .map((d) => ({
-                title: d.title,
-                content: d.description || d.content || '',
+            .map((e) => ({
+                title: e.title.trim(),
+                content: (e.content || '').trim(),
             }))
     );
 
-    // Tips: simple lowercase dedupe — they're plain strings.
+    // Strings: dedupe case-insensitively.
     const seenTips = new Set();
-    out.tips = out.tips
+    out.examTips = out.examTips
         .filter((t) => typeof t === 'string')
+        .map((t) => t.trim())
         .filter((t) => {
-            const k = t.trim().toLowerCase();
+            const k = t.toLowerCase();
             if (!k || seenTips.has(k)) return false;
             seenTips.add(k);
+            return true;
+        });
+
+    const seenPoints = new Set();
+    out.importantPoints = out.importantPoints
+        .filter((t) => typeof t === 'string')
+        .map((t) => t.trim())
+        .filter((t) => {
+            const k = t.toLowerCase();
+            if (!k || seenPoints.has(k)) return false;
+            seenPoints.add(k);
             return true;
         });
 
     return out;
 };
 
-// ─── stage 2: final polish ───────────────────────────────────────────────────
+// ─── stage 2 — single rewrite pass ──────────────────────────────────────────
 
 /**
- * Run the final aggregation pass on merged chapters. Returns the polished
- * chapters + a mind-map outline (the latter is just a fallback; the
- * dedicated mindmapService produces a richer Mermaid version separately).
+ * The V3 rewrite pass. One AI call that polishes the merged chapters.
+ *
+ * NOTE: this is a POLISH pass, not an enrichment pass. The prompt instructs
+ * the model not to invent new facts; if it tries anyway we still ship what
+ * it gives us — drift is bounded and the alternative (manual chapter
+ * polishing per pass) was what made V2 expensive.
+ *
+ * If the rewrite call fails entirely (every provider exhausted, JSON
+ * parsing fails, etc.) we fall back to the merged-but-unpolished chapters
+ * so the user still gets a usable summary instead of a hard error.
  */
-export const finaliseChapters = async ({ merged, settings, targetWords }) => {
+export const rewriteMergedDocument = async ({ merged, settings, targetWords, chain }) => {
     if (!merged.chapters.length) {
         return {
             chapters: [
@@ -175,41 +249,36 @@ export const finaliseChapters = async ({ merged, settings, targetWords }) => {
                         '_The summarizer was unable to extract chapter-level structure from this document. Open the original document for full content._',
                 },
             ],
-            mindmapMarkdown: '',
         };
     }
 
     try {
-        const raw = await generateJson(
-            chapterFinalisePrompt({
+        const raw = await chain.generateJson(
+            rewriteMergedPrompt({
                 mergedChapters: merged.chapters,
                 settings,
                 targetWords,
             }),
-            { label: 'chapter-finalise', maxTokens: 8192, temperature: 0.4 }
+            { label: 'rewrite-merged', maxTokens: 8192, temperature: 0.4 }
         );
         const parsed = safeParseJson(raw);
-
         if (parsed && Array.isArray(parsed.chapters) && parsed.chapters.length) {
             return {
                 chapters: parsed.chapters.map((c) => ({
-                    title: c.title || 'Untitled Section',
-                    content: c.content || '',
+                    title: (c.title || 'Untitled Section').trim(),
+                    content: (c.content || '').trim(),
                 })),
-                mindmapMarkdown: parsed.mindmapMarkdown || '',
             };
         }
     } catch (err) {
-        console.error('chapter finalise failed:', err.message);
+        console.error('rewrite-merged failed:', err.message);
     }
 
-    // Fallback: keep the raw per-chunk chapters as-is so we still ship a
-    // usable summary even if the polish pass fails entirely.
+    // Fallback: ship the merged chapters as-is.
     return {
         chapters: merged.chapters.map((c) => ({
             title: c.title || 'Untitled Section',
-            content: c.summary || c.content || '',
+            content: c.content || '',
         })),
-        mindmapMarkdown: '',
     };
 };
