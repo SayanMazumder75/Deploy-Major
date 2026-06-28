@@ -97,6 +97,8 @@ export const API_PATHS = {
         SAVE_TO_DOCUMENTS: (id) => `/api/ai-intelligence/${id}/save-to-documents`,
         ASK: (id) => `/api/ai-intelligence/${id}/ask`,
         TRANSLATE: (id) => `/api/ai-intelligence/${id}/translate`,
+        // SSE live progress stream — see aiIntelligenceService.streamProgress.
+        PROGRESS: (id) => `/api/ai-intelligence/${id}/progress`,
     },
 
 };

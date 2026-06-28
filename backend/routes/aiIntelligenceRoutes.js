@@ -11,6 +11,7 @@ import {
     saveSummaryToDocuments,
     askIntelligenceSummary,
     translateIntelligenceSummary,
+    streamGenerationProgress,
 } from '../controllers/aiIntelligenceController.js';
 
 const router = express.Router();
@@ -43,5 +44,12 @@ router.get('/:id/download', downloadIntelligencePdf);
 router.post('/:id/save-to-documents', saveSummaryToDocuments);
 router.post('/:id/ask', askIntelligenceSummary);
 router.post('/:id/translate', translateIntelligenceSummary);
+
+// ── progress (SSE) ───────────────────────────────────────────────────────────
+// Live progress stream for an in-flight (or recently completed) generation.
+// SSE is preferable to polling here because the V2 processing screen wants
+// per-stage events the moment they happen, and SSE is supported by every
+// browser without any extra client-side library beyond `EventSource`.
+router.get('/:id/progress', streamGenerationProgress);
 
 export default router;
