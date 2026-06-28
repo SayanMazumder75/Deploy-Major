@@ -1,25 +1,32 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// promptTemplates
+// shared/promptTemplates  (V3)
 //
-// One file holding every prompt the AI Document Intelligence pipeline
-// emits. Keeping them centralised here (rather than inlined in each
-// service) means:
-//   - prompt engineering iterations only touch one file
-//   - the voice / tone-of-voice instruction is appended uniformly
-//   - we can A/B test prompt variants by swapping factories without
-//     touching service logic
+// V3 collapses what used to be 4 separate enrichment passes (definitions /
+// formulas / examples / tips) into ONE rich JSON response per chunk. The
+// only follow-up AI work after chunk extraction is:
 //
-// Every factory takes a normalised settings object (see /shared/studyGoalConfig)
-// plus content, returns a string. Services then hand the string to the
-// provider chain via generateJson / generateText.
+//   - `rewriteMergedPrompt`   — single pass to polish prose + dedupe
+//   - `flashcardsPrompt`      — 1 call from rewritten chapters
+//   - `quizPrompt`            — 1 call from rewritten chapters
+//   - `vivaPrompt`            — 1 call from rewritten chapters
+//   - `mindmapPrompt`         — 1 call from rewritten chapters
+//   - `askAiPrompt` / `translatePrompt` — viewer-side interactive prompts
+//
+// That's ~25–35 AI calls per generation vs ~38–82 in V2. The reduction
+// comes from killing the per-resource enrichment loop; everything we need
+// for the definition / formula / example / tip cards now lives in the
+// chunk's structured response.
+//
+// Every prompt header is uniform: study goal voice + language + an
+// explicit "STRICT JSON only, no fences" preamble for JSON-shaped prompts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { resolveStudyContext } from './studyGoalConfig.js';
 
 /**
- * Common instruction scaffold prepended to every prompt. Keeps the
- * "what voice", "what language", "no markdown fences in JSON output"
- * rules consistent across every stage.
+ * Common scaffold prepended to every prompt. Keeps voice + language +
+ * output-format instructions consistent across stages so we don't fight
+ * subtle prompt drift between services.
  */
 const buildHeader = (settings, { jsonOnly = false } = {}) => {
     const ctx = resolveStudyContext(settings);
@@ -34,24 +41,26 @@ const buildHeader = (settings, { jsonOnly = false } = {}) => {
     ].join('\n');
 };
 
-// ─── stage 1: per-chunk extraction ───────────────────────────────────────────
+// ─── stage 1: per-chunk extraction (single call, rich JSON) ─────────────────
 
 /**
- * Per-chunk extraction prompt. Asks the model for a structured JSON object
- * containing chapter summaries, raw definitions, raw formulas, raw
- * examples, raw diagrams, and raw exam tips from a single chunk of source
- * text.
+ * Per-chunk extraction prompt.
  *
- * Advanced options gate which arrays the model emits — preserveFormulas,
- * preserveDefinitions, explainDiagrams, keepExamples each remove the
- * corresponding section from the request if false.
+ * V3 critical change: this is the ONLY AI call per chunk. The response
+ * must contain every resource we care about — chapter summary, definitions,
+ * key concepts, formulas, examples, exam tips, important points. We will
+ * never re-prompt the model to enrich any of these later.
  *
- * @param {Object} args
- * @param {string} args.chunk            Source-text chunk.
- * @param {Object} args.settings         Normalised settings.
- * @param {number} args.chunkIndex
- * @param {number} args.totalChunks
- * @returns {string}
+ * Schema is intentionally compact (2 fields per definition, not 7 like V2
+ * tried to enrich into) — fewer output tokens per chunk × 20–30 chunks
+ * compounds into ~50% fewer output tokens overall. The viewer's
+ * RichCardsView already renders gracefully when optional fields are empty,
+ * so the simpler shape doesn't degrade UX.
+ *
+ * Advanced-options gates: when an advanced option is OFF, we OMIT the
+ * corresponding array from the schema so the model doesn't waste tokens
+ * filling it. The orchestrator's compose step still skips disabled sections
+ * regardless of what the model returns.
  */
 export const perChunkExtractionPrompt = ({
     chunk,
@@ -63,144 +72,76 @@ export const perChunkExtractionPrompt = ({
     const includeFormulas = adv.preserveFormulas !== false;
     const includeDefinitions = adv.preserveDefinitions !== false;
     const includeExamples = adv.keepExamples !== false;
-    const includeDiagrams = !!adv.explainDiagrams;
 
     return `${buildHeader(settings, { jsonOnly: true })}
 
 You are processing chunk ${chunkIndex + 1} of ${totalChunks} of an educational document.
-Extract structured study material from THIS chunk only. Do NOT invent material that isn't in the chunk.
+Extract a COMPLETE structured summary of THIS chunk in ONE response. Do not
+invent material that isn't in the chunk.
 
 Return a JSON object matching exactly this schema (omit arrays whose flag is false):
 {
-  "chapters": [{"title": "Chapter / section title from this chunk", "summary": "3-6 bullet-style sentences. Use \\n- prefix per bullet."}],
-${includeDefinitions ? '  "definitions": [{"term": "the term", "definition": "concise 1-2 sentence definition"}],\n' : ''}${includeFormulas ? '  "formulas": [{"name": "what the formula computes", "expression": "the formula itself, plain text or LaTeX-ish", "variables": "what each symbol means", "notes": "when it applies"}],\n' : ''}${includeExamples ? '  "examples": [{"title": "example title", "content": "1-3 sentence example from the chunk"}],\n' : ''}${includeDiagrams ? '  "diagrams": [{"title": "diagram or figure title", "description": "what the diagram shows in 1-3 sentences"}],\n' : ''}  "concepts":  [{"title": "key concept", "explanation": "1-3 sentence explanation"}],
-  "tips":      ["short actionable exam / study tip from this chunk"]
+  "chapterTitle": "Most descriptive chapter / section title for this chunk",
+  "summary":      "3–8 markdown bullets ('\\n- bullet') capturing the chunk's main ideas. Bold key terms with **bold**.",
+${includeDefinitions ? '  "definitions":      [{"term": "the term", "definition": "concise 1–2 sentence definition"}],\n' : ''}  "keyConcepts":      [{"title": "key concept", "explanation": "1–3 sentence explanation"}],
+${includeFormulas ? '  "formulas":         [{"name": "what the formula computes", "expression": "the formula itself, plain text or LaTeX-ish", "variables": "what each symbol means", "notes": "when it applies (optional)"}],\n' : ''}${includeExamples ? '  "examples":         [{"title": "example title", "content": "1–3 sentence example from the chunk"}],\n' : ''}  "examTips":         ["short actionable exam / study tip from this chunk"],
+  "importantPoints":  ["concise high-yield fact worth remembering"]
 }
 
 CHUNK TEXT:
 ${chunk}
-`;
+`.trim();
 };
 
-// ─── stage 2: chapter polish + table of contents ────────────────────────────
+// ─── stage 2: single rewrite pass ────────────────────────────────────────────
 
 /**
- * Final aggregation prompt. Takes merged chapter summaries from all
- * chunks and asks the model to re-order, polish wording, and emit a
- * lightweight mind-map outline that ties them together.
+ * V3's "single rewrite pass". Takes the MERGED chapter summaries from every
+ * chunk and produces a polished, deduplicated, re-ordered final version.
+ *
+ * This is the only AI work we do AFTER chunk extraction (apart from the
+ * four bundle prompts). It exists because:
+ *   - Per-chunk summaries written in isolation often repeat earlier
+ *     material that's already in another chunk.
+ *   - Auto-detected chapter titles ("Chapter section 1") need humanising.
+ *   - Reading order in long PDFs is often jumbled by the original
+ *     pagination — a polish pass re-orders intro → core → advanced
+ *     → closing.
+ *
+ * IMPORTANT: this is a POLISH pass, not an enrichment pass. It must NOT
+ * invent new facts. The prompt is explicit about that.
  */
-export const chapterFinalisePrompt = ({ mergedChapters, settings, targetWords }) =>
+export const rewriteMergedPrompt = ({ mergedChapters, settings, targetWords }) =>
     `${buildHeader(settings, { jsonOnly: true })}
 
-You are finalising chapter-level summaries by polishing pre-extracted chapter chunks.
+You are polishing the final draft of an educational study summary by
+rewriting pre-extracted chapter summaries. This is the SINGLE rewrite pass
+the pipeline performs after merging chunk-level data — make it count.
+
 Target total length across all chapter contents combined: roughly ${targetWords} words.
 
 Tasks:
 1. Re-order chapters into a natural reading order (intro → core → advanced → closing).
-2. Rewrite each chapter "content" as clean markdown with bullet points, **bolded** key terms, and short subheadings (## prefix) where they help readability.
+2. Rewrite each chapter "content" as clean markdown with bullet points,
+   **bolded** key terms, and short ## subheadings where they help readability.
 3. Improve auto-generated titles like "Chapter section 1" into descriptive names.
-4. Do NOT add or remove information. No fabrications.
+4. Remove duplicate ideas that appear in more than one chapter, but PRESERVE
+   the chapters' distinct scope — don't merge two chapters into one.
+5. Do NOT add or remove information. No fabrications.
 
 Return JSON exactly matching:
 {
-  "chapters": [{"title": "Descriptive chapter title", "content": "polished markdown body"}],
-  "mindmapMarkdown": "An 8-20 line nested-bullet mind map outline tying the chapters together."
+  "chapters": [{"title": "Descriptive chapter title", "content": "polished markdown body"}]
 }
 
 PRE-EXTRACTED CHAPTERS (JSON):
 ${JSON.stringify(mergedChapters, null, 2)}
 `;
 
-// ─── stage 3: enrichment passes (per-resource type) ─────────────────────────
-
-export const definitionEnrichmentPrompt = ({ rawDefinitions, settings }) =>
-    `${buildHeader(settings, { jsonOnly: true })}
-
-You are enriching a raw list of definitions extracted from a study document.
-For EACH definition, produce a rich card with the fields below. Keep wording
-crisp; never invent facts. If a field genuinely doesn't apply, return an
-empty string for it.
-
-Return JSON:
-{
-  "definitions": [{
-    "term": "the term",
-    "definition": "1-2 sentence rigorous definition",
-    "simpleExplanation": "the same concept in plain language a beginner would understand",
-    "analogy": "a one-line real-world analogy (or empty string)",
-    "importance": "why this term matters in this subject (one line)",
-    "examQuestion": "one likely exam-style question on this term",
-    "interviewQuestion": "one likely interview-style question on this term"
-  }]
-}
-
-RAW DEFINITIONS (JSON):
-${JSON.stringify(rawDefinitions, null, 2)}
-`;
-
-export const formulaEnrichmentPrompt = ({ rawFormulas, settings }) =>
-    `${buildHeader(settings, { jsonOnly: true })}
-
-You are enriching a raw list of formulas extracted from a study document.
-For EACH formula, produce a rich card with the fields below. Keep the
-formula expression as the source had it; do not "fix" notation differences.
-
-Return JSON:
-{
-  "formulas": [{
-    "name": "what the formula computes",
-    "expression": "the formula as written (plain text or LaTeX-ish)",
-    "variables": "what each symbol means (one line)",
-    "explanation": "how/when the formula is used",
-    "example": "one-line worked example or substitution",
-    "examImportance": "low | medium | high",
-    "interviewImportance": "low | medium | high"
-  }]
-}
-
-RAW FORMULAS (JSON):
-${JSON.stringify(rawFormulas, null, 2)}
-`;
-
-export const exampleEnrichmentPrompt = ({ rawExamples, settings }) =>
-    `${buildHeader(settings, { jsonOnly: true })}
-
-You are enriching a raw list of examples extracted from a study document.
-For EACH example, expand it into the schema below. Where the source
-example is purely conceptual, you may add a plausible real-world or exam
-variant — but mark the source field accordingly.
-
-Return JSON:
-{
-  "examples": [{
-    "title": "example title",
-    "conceptExample": "the conceptual example as written in the source",
-    "realWorldExample": "a real-world application of the same concept",
-    "examExample": "an exam-style restatement of the same problem",
-    "interviewExample": "how this might come up in an interview"
-  }]
-}
-
-RAW EXAMPLES (JSON):
-${JSON.stringify(rawExamples, null, 2)}
-`;
-
-export const examTipsPrompt = ({ rawTips, settings }) =>
-    `${buildHeader(settings, { jsonOnly: true })}
-
-Polish a raw list of exam tips into a clean, deduplicated, ranked list.
-Keep each tip to a single actionable sentence.
-
-Return JSON:
-{
-  "tips": ["short actionable exam / study tip"]
-}
-
-RAW TIPS (JSON):
-${JSON.stringify(rawTips, null, 2)}
-`;
-
-// ─── stage 4: bundled resources (flashcards / quiz / viva / mindmap) ─────────
+// ─── stage 3: bundle resources (flashcards / quiz / viva / mindmap) ─────────
+//
+// Each of these is ONE call total — never one per chapter. The chapters
+// array is fed in as JSON context.
 
 export const flashcardsPrompt = ({ chapters, settings, count }) =>
     `${buildHeader(settings, { jsonOnly: true })}
@@ -211,8 +152,8 @@ Each flashcard should test ONE specific fact, definition, or skill.
 Return JSON:
 {
   "flashcards": [{
-    "question": "Clear, specific question",
-    "answer":   "Concise, accurate answer (1-3 sentences)",
+    "question":   "Clear, specific question",
+    "answer":     "Concise, accurate answer (1–3 sentences)",
     "difficulty": "easy | medium | hard"
   }]
 }
@@ -234,7 +175,7 @@ Return JSON:
     "options":        ["option 1", "option 2", "option 3", "option 4"],
     "correctIndex":   0,
     "correctAnswer":  "the exact text of the correct option",
-    "explanation":    "1-2 sentence explanation of why the correct option is correct",
+    "explanation":    "1–2 sentence explanation of why the correct option is correct",
     "difficulty":     "easy | medium | hard"
   }]
 }
@@ -253,7 +194,7 @@ Return JSON:
 {
   "vivaQuestions": [{
     "question":       "viva question phrased as an examiner would ask it",
-    "expectedAnswer": "the 2-4 sentence expected answer",
+    "expectedAnswer": "the 2–4 sentence expected answer",
     "difficulty":     "easy | medium | hard"
   }]
 }
@@ -266,8 +207,8 @@ export const mindmapPrompt = ({ chapters, settings }) =>
     `${buildHeader(settings, { jsonOnly: true })}
 
 Generate a Mermaid mindmap representing the structure of the chapters below.
-The root node should be the document topic, with each chapter as a top-level
-branch and 2-5 key sub-concepts under each.
+Root node = the document topic; each chapter = a top-level branch with 2–5
+key sub-concepts under each.
 
 Return JSON:
 {

@@ -1,14 +1,9 @@
-// vivaService
+// vivaService (V3)
 //
-// Bundle stage: generate viva-style oral-exam questions from the polished
-// chapter summaries. Each item has `question`, `expectedAnswer`, and a
-// normalised difficulty.
-//
-// Note: this is the AI-Intelligence-LOCAL viva bundle. The existing
-// /api/ai/viva endpoint (which drives the Voice Tutor on the Documents
-// page) is a separate feature with conversational state and is unchanged.
+// Bundle stage — generates viva-style oral-exam questions from the
+// rewritten chapter summaries. ONE AI call per generation, using the
+// scoped Intelligence chain.
 
-import { generateJson } from '../providers/index.js';
 import { safeParseJson, ensureArray } from './shared/jsonParser.js';
 import { vivaPrompt } from './shared/promptTemplates.js';
 
@@ -17,10 +12,15 @@ const normaliseDifficulty = (v) =>
         ? v.toLowerCase()
         : 'medium';
 
-export const generateVivaQuestions = async ({ chapters, settings, count = 10 }) => {
+export const generateVivaQuestions = async ({
+    chapters,
+    settings,
+    count = 10,
+    chain,
+}) => {
     if (!chapters?.length) return [];
     try {
-        const raw = await generateJson(
+        const raw = await chain.generateJson(
             vivaPrompt({ chapters, settings, count }),
             { label: 'viva', maxTokens: 4096, temperature: 0.6 }
         );

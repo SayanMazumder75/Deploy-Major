@@ -1,31 +1,47 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// intelligencePipeline
+// intelligencePipeline (V3)
 //
 // The single orchestrator that drives an AI Document Intelligence
-// generation end-to-end. Composes every service in /services in the
-// right order, emits progress events to the pipelineRegistry, and
-// returns the populated rich-data shape ready to be merged into an
-// AISummary document.
+// generation end-to-end. V3 redesign per the token-optimisation spec:
 //
-// Stage plan:
-//   ingest        — wrap the source text + compute initial metrics
-//   chunk         — semanticChunk()
-//   extract       — extractChunk() per chunk, then mergeChunkResults()
-//   chapters      — finaliseChapters() (rewrite + reorder)
-//   definitions   — enrichDefinitions()        (skip-able)
-//   formulas      — enrichFormulas()           (skip-able)
-//   examples      — enrichExamples()           (skip-able)
-//   tips          — polishExamTips()
-//   flashcards    — generateFlashcards()       (bundle, parallel)
-//   quiz          — generateQuiz()             (bundle, parallel)
-//   viva          — generateVivaQuestions()    (bundle, parallel)
-//   mindmap       — generateMindMap()          (bundle, parallel)
-//   compose       — build sections[] + rawMarkdown + TOC + insights
+//   PER-CALL CHANGES
+//     - Provider chain: uses `intelligenceChain` from providers/intelligence
+//       (NVIDIA → Groq → OpenRouter; Gemini deliberately skipped).
+//     - Each generation creates a SCOPED chain instance via runScoped();
+//       provider health (NVIDIA disabled, Groq disabled, etc.) carries
+//       across every service call inside this pipeline run.
 //
-// The bundle stages run in parallel via Promise.all because they're
-// mutually independent and each is its own provider call — running
-// them sequentially would unnecessarily double the wall-clock time of
-// generation.
+//   STAGES (12, down from 15 in V2)
+//     1. ingest    — compute target chunk size, validate text
+//     2. ocr       — NVIDIA-only, currently a graceful no-op
+//     3. chunk     — semanticChunk (≤30 chunks, scaled target)
+//     4. extract   — ONE AI call per chunk via pLimit(2). Single rich JSON
+//                    response per chunk supplies definitions / formulas /
+//                    examples / tips / important points — NO further
+//                    enrichment passes.
+//     5. merge     — local-only dedupe + normalisation, zero AI
+//     6. rewrite   — single AI polish call (replaces V2's chapter
+//                    finalise + the 4 separate enrichment passes)
+//     7. flashcards (parallel) — 1 AI call
+//     8. quiz       (parallel) — 1 AI call
+//     9. viva       (parallel) — 1 AI call
+//    10. mindmap    (parallel) — 1 AI call
+//    11. diagrams   — NVIDIA Cosmos, currently a graceful no-op
+//    12. compose    — local assembly of sections[] + insights, zero AI
+//
+//   TOTAL AI CALLS
+//     ≤30 (chunks) + 1 (rewrite) + 4 (flashcards/quiz/viva/mindmap) = ≤35
+//     — vs V2's ≤30 (chunks) + 1 (chapter finalise) + 4 (enrichment) +
+//        4 (bundle) = ≤39 in the most chunk-heavy case. The savings are
+//     bigger than they look because each V2 enrichment pass on a
+//     ~30-resource list could be ~10x larger than a bundle call. V3 also
+//     eliminates the per-resource fan-out variance entirely.
+//
+//   PROGRESS REPORTING
+//     Stage events flow through pipelineRegistry to the SSE handler the
+//     frontend subscribes to. The 12-stage shape is exposed via
+//     `PIPELINE_STAGE_PLAN` so the SSE handler can send the plan
+//     up-front and the UI renders every stage row before events arrive.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -40,16 +56,15 @@ import {
     failPipeline,
 } from './pipelineRegistry.js';
 
-import { semanticChunk } from './chunkService.js';
+import { intelligenceChain } from '../providers/intelligence.js';
+import { pLimit } from './concurrency.js';
+
+import { semanticChunk, computeTargetWords } from './chunkService.js';
 import {
     extractChunk,
     mergeChunkResults,
-    finaliseChapters,
+    rewriteMergedDocument,
 } from './summaryService.js';
-import { enrichDefinitions } from './definitionService.js';
-import { enrichFormulas } from './formulaService.js';
-import { enrichExamples } from './exampleService.js';
-import { polishExamTips } from './examTipService.js';
 import { generateFlashcards } from './flashcardService.js';
 import { generateQuiz } from './quizService.js';
 import { generateVivaQuestions } from './vivaService.js';
@@ -59,23 +74,25 @@ import { detectAndExplainDiagrams } from './diagramService.js';
 
 import { targetWordsFor } from './shared/studyGoalConfig.js';
 
-// ─── stage plan ──────────────────────────────────────────────────────────────
+// V3 spec: maximum concurrent AI requests = 3; recommended = 2. We pick 2
+// to stay comfortably inside every provider's free-tier rate limits while
+// still doubling chunk-extraction throughput vs the V2 sequential loop.
+const CHUNK_CONCURRENCY = 2;
+
+// ─── stage plan (12 visible stages) ─────────────────────────────────────────
 
 const STAGE_PLAN = [
     { id: 'ingest', label: 'Ingesting document' },
     { id: 'ocr', label: 'OCR (scanned-page recovery)' },
     { id: 'chunk', label: 'Splitting into semantic chunks' },
     { id: 'extract', label: 'AI processing each chunk' },
-    { id: 'chapters', label: 'Polishing chapter summaries' },
-    { id: 'definitions', label: 'Enriching definitions' },
-    { id: 'formulas', label: 'Enriching formulas' },
-    { id: 'examples', label: 'Enriching examples' },
-    { id: 'diagrams', label: 'Understanding diagrams' },
-    { id: 'tips', label: 'Curating exam tips' },
+    { id: 'merge', label: 'Merging chunk results' },
+    { id: 'rewrite', label: 'AI rewrite pass' },
     { id: 'flashcards', label: 'Generating flashcards' },
     { id: 'quiz', label: 'Generating quiz' },
     { id: 'viva', label: 'Generating viva questions' },
     { id: 'mindmap', label: 'Generating mind map' },
+    { id: 'diagrams', label: 'Understanding diagrams' },
     { id: 'compose', label: 'Assembling final summary' },
 ];
 
@@ -94,12 +111,12 @@ const slugify = (s) =>
 
 const wordCount = (s) => (s ? s.split(/\s+/).filter(Boolean).length : 0);
 
-// ─── compose stage ───────────────────────────────────────────────────────────
-// Build the V1-compatible sections[] + rawMarkdown view, plus the TOC.
-// Keeping the markdown view alongside the rich shapes means the existing
-// summary viewer + PDF builder keep working unchanged while the new V2
-// frontend can opt in to the rich fields whenever it's ready to render
-// them.
+// ─── compose step (LOCAL — no AI) ───────────────────────────────────────────
+//
+// Build the V1-compatible sections[] + rawMarkdown view from the V3 rich
+// data. Keeping the markdown view alongside the structured fields means
+// the existing summary viewer + PDF builder keep working unchanged while
+// the new V3 frontend can opt into the rich fields for richer cards.
 
 const composeFinalDoc = ({
     finalChapters,
@@ -108,6 +125,7 @@ const composeFinalDoc = ({
     enrichedExamples,
     keyConcepts,
     tips,
+    importantPoints,
     mindmap,
     settings,
     diagrams = [],
@@ -115,15 +133,13 @@ const composeFinalDoc = ({
     const adv = settings.advancedOptions || {};
     const sections = [];
 
-    // Chapters with anchors so the TOC can deep-link to them.
+    // Chapter list with stable anchors so the TOC can deep-link to them.
     const chapters = finalChapters.chapters.map((c) => ({
         anchor: slugify(c.title),
         title: c.title,
         content: c.content,
     }));
 
-    // Table of contents (just chapter-level for now; sub-headings would
-    // require parsing the chapter markdown).
     const tableOfContents = chapters.map((c) => ({
         anchor: c.anchor,
         title: c.title,
@@ -156,19 +172,8 @@ const composeFinalDoc = ({
             title: 'Important Definitions',
             anchor: 'definitions',
             content: enrichedDefinitions
-                .map((d) => {
-                    const lines = [`**${d.term}** — ${d.definition}`];
-                    if (d.simpleExplanation)
-                        lines.push(`_Plain language:_ ${d.simpleExplanation}`);
-                    if (d.analogy) lines.push(`_Analogy:_ ${d.analogy}`);
-                    if (d.importance) lines.push(`_Why it matters:_ ${d.importance}`);
-                    if (d.examQuestion)
-                        lines.push(`_Likely exam Q:_ ${d.examQuestion}`);
-                    if (d.interviewQuestion)
-                        lines.push(`_Likely interview Q:_ ${d.interviewQuestion}`);
-                    return lines.join('\n\n');
-                })
-                .join('\n\n---\n\n'),
+                .map((d) => `**${d.term}** — ${d.definition}`)
+                .join('\n\n'),
         });
     }
 
@@ -194,12 +199,6 @@ const composeFinalDoc = ({
                     if (f.expression) lines.push(`\`${f.expression}\``);
                     if (f.variables) lines.push(`_Variables:_ ${f.variables}`);
                     if (f.explanation) lines.push(f.explanation);
-                    if (f.example) lines.push(`_Example:_ ${f.example}`);
-                    if (f.examImportance || f.interviewImportance) {
-                        lines.push(
-                            `_Importance:_ exam=${f.examImportance}, interview=${f.interviewImportance}`
-                        );
-                    }
                     return lines.join('\n\n');
                 })
                 .join('\n\n---\n\n'),
@@ -218,10 +217,6 @@ const composeFinalDoc = ({
                         lines.push(`_Concept:_ ${e.conceptExample}`);
                     if (e.realWorldExample)
                         lines.push(`_Real-world:_ ${e.realWorldExample}`);
-                    if (e.examExample)
-                        lines.push(`_Exam variant:_ ${e.examExample}`);
-                    if (e.interviewExample)
-                        lines.push(`_Interview variant:_ ${e.interviewExample}`);
                     return lines.join('\n\n');
                 })
                 .join('\n\n---\n\n'),
@@ -248,6 +243,17 @@ const composeFinalDoc = ({
         });
     }
 
+    // High-yield bullets — V3 extracts these per chunk; if any survive
+    // the merge, surface them as a top-of-summary "must remember" rail.
+    if (importantPoints.length) {
+        sections.push({
+            kind: 'tips',
+            title: 'Important Points',
+            anchor: 'important-points',
+            content: importantPoints.map((p) => `- ${p}`).join('\n'),
+        });
+    }
+
     if (mindmap.outlineMarkdown) {
         sections.push({
             kind: 'mindmap',
@@ -264,6 +270,8 @@ const composeFinalDoc = ({
     return { chapters, tableOfContents, sections, rawMarkdown };
 };
 
+// ─── insights (LOCAL — no AI) ───────────────────────────────────────────────
+
 const computeInsights = ({
     chapters,
     enrichedDefinitions,
@@ -278,11 +286,12 @@ const computeInsights = ({
     targetWords,
 }) => {
     const actualWords = wordCount(rawMarkdown);
-    // ~250 words/minute comfortable reading.
-    const estimatedReadingTime = Math.max(1, Math.round(actualWords / 250));
+    // V3 spec: reading time = words / 220 (slightly slower than V2's 250
+    // — better calibrated for study material vs casual reading).
+    const estimatedReadingTime = Math.max(1, Math.round(actualWords / 220));
 
-    // Difficulty heuristic: denser source material (more formulas + unique
-    // definitions + concepts) → harder.
+    // Local difficulty heuristic — denser material (more formulas / unique
+    // definitions / diagrams) reads harder. No AI involved.
     let score = 0;
     score += enrichedFormulas.length * 2;
     score += enrichedDefinitions.length;
@@ -311,18 +320,18 @@ const computeInsights = ({
 // ─── main orchestrator ──────────────────────────────────────────────────────
 
 /**
- * Run the full AI Document Intelligence pipeline.
+ * Run the full V3 AI Document Intelligence pipeline.
  *
  * @param {Object} args
- * @param {string} args.summaryId   AISummary id (used for progress events).
- * @param {string} args.text        Full extracted source text.
- * @param {Object} args.settings    Normalised settings object.
+ * @param {string} args.summaryId    AISummary id (drives progress events).
+ * @param {string} args.text         Full extracted source text.
+ * @param {Object} args.settings     Normalised settings object.
  * @param {Object} [args.sourceMeta] Optional source metadata for advanced
- *                                   stages — `filePath` lets OCR/diagram
- *                                   services hit the raw PDF, `numPages`
- *                                   feeds the scanned-doc heuristic.
- * @returns {Promise<Object>}       Populated rich-data shape ready to merge
- *                                  into the AISummary document.
+ *                                    stages (filePath for OCR / diagrams,
+ *                                    numPages for the scanned-doc heuristic).
+ * @returns {Promise<Object>}        Populated rich-data shape ready for the
+ *                                    controller to merge into the AISummary
+ *                                    document.
  */
 export const runIntelligencePipeline = async ({
     summaryId,
@@ -332,14 +341,23 @@ export const runIntelligencePipeline = async ({
 }) => {
     const adv = settings.advancedOptions || {};
 
-    // Build the actual stage plan we'll execute. Skip-able stages are
-    // included so the UI shows a "skipped" marker rather than an absent
-    // step (clearer to the user).
-    const plan = STAGE_PLAN.slice();
-    beginPipeline(summaryId, plan);
+    // Plan + announce up-front so the SSE handler can send the full stage
+    // list to subscribers immediately on connect.
+    beginPipeline(summaryId, STAGE_PLAN);
+
+    // Per-generation provider scope. NVIDIA / Groq / OpenRouter health
+    // tracked together for the lifetime of this run.
+    const chain = intelligenceChain.runScoped();
+    console.log(
+        `[AI Intelligence] pipeline start: scope=${chain.scopeId} · providers=${chain.getActiveProviders().join(',')}`
+    );
 
     const sourceWordCount = wordCount(text);
-    const targetWords = targetWordsFor(settings.summaryLength, sourceWordCount);
+    const computedTarget = computeTargetWords(sourceWordCount);
+    const settingsTarget = targetWordsFor(settings.summaryLength, sourceWordCount);
+
+    // Live insights bucket — updated incrementally as chunk extraction
+    // progresses so the side rail ticks up smoothly.
     const insightsSoFar = {
         chapterCount: 0,
         formulaCount: 0,
@@ -351,19 +369,22 @@ export const runIntelligencePipeline = async ({
         vivaCount: 0,
         estimatedReadingTime: 0,
         difficulty: 'medium',
-        targetWords,
+        targetWords: settingsTarget,
         actualWords: 0,
     };
 
     try {
-        // ── ingest ──────────────────────────────────────────────────────
+        // ── 1. ingest ──────────────────────────────────────────────────
         startStage(summaryId, 'ingest');
         if (!text || text.trim().length < 50) {
             throw new Error('Source document does not contain enough text to summarise.');
         }
-        completeStage(summaryId, 'ingest');
+        completeStage(summaryId, 'ingest', {
+            sourceWordCount,
+            chunkTargetWords: computedTarget,
+        });
 
-        // ── ocr (NVIDIA Nemotron OCR v2 — only fires if scanned + key) ──
+        // ── 2. ocr (NVIDIA-only; gracefully skips without key) ─────────
         startStage(summaryId, 'ocr');
         let workingText = text;
         try {
@@ -381,143 +402,93 @@ export const runIntelligencePipeline = async ({
                 });
             }
         } catch (err) {
-            // OCR failure is never fatal — we just continue with the
-            // original text and surface a skipped marker so the UI shows
-            // something happened.
             console.error('OCR stage threw unexpectedly:', err);
             skipStage(summaryId, 'ocr', `Unexpected OCR error: ${err.message}`);
         }
 
-        // ── chunk ───────────────────────────────────────────────────────
+        // ── 3. chunk ───────────────────────────────────────────────────
         startStage(summaryId, 'chunk');
         const chunks = semanticChunk(workingText);
-        completeStage(summaryId, 'chunk', { chunkCount: chunks.length });
+        completeStage(summaryId, 'chunk', {
+            chunkCount: chunks.length,
+            chunkTargetWords: computedTarget,
+        });
 
-        // ── extract (per chunk) ─────────────────────────────────────────
+        // ── 4. extract (concurrency = 2) ───────────────────────────────
         startStage(summaryId, 'extract');
-        const chunkResults = [];
-        for (let i = 0; i < chunks.length; i++) {
-            const c = chunks[i];
-            try {
-                const result = await extractChunk({
-                    chunk: c,
-                    settings,
-                    totalChunks: chunks.length,
-                });
-                chunkResults.push(result);
-            } catch (err) {
-                console.error(`Chunk ${i + 1}/${chunks.length} failed:`, err.message);
-                chunkResults.push({
-                    chapters: [],
-                    definitions: [],
-                    concepts: [],
-                    formulas: [],
-                    examples: [],
-                    diagrams: [],
-                    tips: [],
-                });
-            }
-            // Per-chunk progress update — the Processing Screen uses these
-            // to animate the "AI processing each chunk" bar smoothly even
-            // for very long documents.
-            const pct = Math.round(((i + 1) / chunks.length) * 100);
-            updateStageProgress(summaryId, 'extract', pct, {
-                chunkIndex: i + 1,
-                totalChunks: chunks.length,
-            });
+        // V3: bounded parallelism. pLimit(2) gives us ~2× the throughput
+        // of the V2 sequential loop while staying well inside every free-
+        // tier rate limit. We pre-allocate the result array so the merge
+        // step sees results in chunk order regardless of completion order.
+        const limit = pLimit(CHUNK_CONCURRENCY);
+        const chunkResults = new Array(chunks.length);
+        let extractsCompleted = 0;
+        await Promise.all(
+            chunks.map((chunk, i) =>
+                limit(async () => {
+                    const result = await extractChunk({
+                        chunk,
+                        settings,
+                        totalChunks: chunks.length,
+                        chain,
+                    });
+                    chunkResults[i] = result;
 
-            // Live insights — update the running totals so the side rail
-            // ticks up as material is extracted.
-            insightsSoFar.definitionCount += (chunkResults[i].definitions || []).length;
-            insightsSoFar.formulaCount += (chunkResults[i].formulas || []).length;
-            insightsSoFar.diagramCount += (chunkResults[i].diagrams || []).length;
-            insightsSoFar.keyConceptCount += (chunkResults[i].concepts || []).length;
-            publishInsights(summaryId, { ...insightsSoFar });
-        }
+                    // Live progress + incremental insights so the side
+                    // rail counts up even while extraction is still in
+                    // flight on other chunks.
+                    extractsCompleted += 1;
+                    const pct = Math.round((extractsCompleted / chunks.length) * 100);
+                    updateStageProgress(summaryId, 'extract', pct, {
+                        completed: extractsCompleted,
+                        totalChunks: chunks.length,
+                    });
+                    insightsSoFar.definitionCount += (result.definitions || []).length;
+                    insightsSoFar.formulaCount += (result.formulas || []).length;
+                    insightsSoFar.keyConceptCount += (result.keyConcepts || []).length;
+                    publishInsights(summaryId, { ...insightsSoFar });
+                })
+            )
+        );
+        completeStage(summaryId, 'extract', {
+            extractedChunks: chunkResults.filter(Boolean).length,
+        });
+
+        // ── 5. merge (LOCAL) ───────────────────────────────────────────
+        startStage(summaryId, 'merge');
         const merged = mergeChunkResults(chunkResults);
-
         // Refresh insights with deduped counts.
         insightsSoFar.chapterCount = merged.chapters.length;
         insightsSoFar.definitionCount = merged.definitions.length;
         insightsSoFar.formulaCount = merged.formulas.length;
-        insightsSoFar.diagramCount = merged.diagrams.length;
-        insightsSoFar.keyConceptCount = merged.concepts.length;
+        insightsSoFar.keyConceptCount = merged.keyConcepts.length;
         publishInsights(summaryId, { ...insightsSoFar });
-        completeStage(summaryId, 'extract');
+        completeStage(summaryId, 'merge', {
+            chapters: merged.chapters.length,
+            definitions: merged.definitions.length,
+            formulas: merged.formulas.length,
+            concepts: merged.keyConcepts.length,
+            examples: merged.examples.length,
+            tips: merged.examTips.length,
+        });
 
-        // ── chapters (polish + reorder) ─────────────────────────────────
-        startStage(summaryId, 'chapters');
-        const finalChapters = await finaliseChapters({
+        // ── 6. rewrite (single AI polish pass) ─────────────────────────
+        startStage(summaryId, 'rewrite');
+        const finalChapters = await rewriteMergedDocument({
             merged,
             settings,
-            targetWords,
+            targetWords: settingsTarget,
+            chain,
         });
         insightsSoFar.chapterCount = finalChapters.chapters.length;
         publishInsights(summaryId, { ...insightsSoFar });
-        completeStage(summaryId, 'chapters', {
+        completeStage(summaryId, 'rewrite', {
             chapterCount: finalChapters.chapters.length,
         });
 
-        // ── definitions ─────────────────────────────────────────────────
-        let enrichedDefinitions = [];
-        if (adv.preserveDefinitions === false) {
-            skipStage(summaryId, 'definitions', 'preserveDefinitions disabled');
-        } else if (!merged.definitions.length) {
-            skipStage(summaryId, 'definitions', 'no definitions extracted');
-        } else {
-            startStage(summaryId, 'definitions');
-            enrichedDefinitions = await enrichDefinitions({
-                rawDefinitions: merged.definitions,
-                settings,
-            });
-            insightsSoFar.definitionCount = enrichedDefinitions.length;
-            publishInsights(summaryId, { ...insightsSoFar });
-            completeStage(summaryId, 'definitions');
-        }
-
-        // ── formulas ────────────────────────────────────────────────────
-        let enrichedFormulas = [];
-        if (adv.preserveFormulas === false) {
-            skipStage(summaryId, 'formulas', 'preserveFormulas disabled');
-        } else if (!merged.formulas.length) {
-            skipStage(summaryId, 'formulas', 'no formulas extracted');
-        } else {
-            startStage(summaryId, 'formulas');
-            enrichedFormulas = await enrichFormulas({
-                rawFormulas: merged.formulas,
-                settings,
-            });
-            insightsSoFar.formulaCount = enrichedFormulas.length;
-            publishInsights(summaryId, { ...insightsSoFar });
-            completeStage(summaryId, 'formulas');
-        }
-
-        // ── examples ────────────────────────────────────────────────────
-        let enrichedExamples = [];
-        if (adv.keepExamples === false) {
-            skipStage(summaryId, 'examples', 'keepExamples disabled');
-        } else if (!merged.examples.length) {
-            skipStage(summaryId, 'examples', 'no examples extracted');
-        } else {
-            startStage(summaryId, 'examples');
-            enrichedExamples = await enrichExamples({
-                rawExamples: merged.examples,
-                settings,
-            });
-            completeStage(summaryId, 'examples');
-        }
-
-        // ── tips ────────────────────────────────────────────────────────
-        startStage(summaryId, 'tips');
-        const tips = await polishExamTips({ rawTips: merged.tips, settings });
-        completeStage(summaryId, 'tips');
-
-        // ── bundle (parallel) ───────────────────────────────────────────
-        // These five stages are mutually independent. Running them in
-        // parallel cuts ~4 round-trips of wall-clock latency off every
-        // generation. We mark each as "running" before kicking the lot
-        // off so the UI shows them all spinning together, then completes
-        // them individually as their promises resolve.
+        // ── 7–10. bundle (parallel) + 11. diagrams (parallel) ──────────
+        // Five mutually-independent AI calls (and one no-op stub). Running
+        // them in parallel saves ~4 sequential round-trips.
         startStage(summaryId, 'flashcards');
         startStage(summaryId, 'quiz');
         startStage(summaryId, 'viva');
@@ -527,6 +498,7 @@ export const runIntelligencePipeline = async ({
         const flashcardP = generateFlashcards({
             chapters: finalChapters.chapters,
             settings,
+            chain,
         })
             .then((r) => {
                 completeStage(summaryId, 'flashcards', { count: r.length });
@@ -542,6 +514,7 @@ export const runIntelligencePipeline = async ({
         const quizP = generateQuiz({
             chapters: finalChapters.chapters,
             settings,
+            chain,
         })
             .then((r) => {
                 completeStage(summaryId, 'quiz', { count: r.length });
@@ -557,6 +530,7 @@ export const runIntelligencePipeline = async ({
         const vivaP = generateVivaQuestions({
             chapters: finalChapters.chapters,
             settings,
+            chain,
         })
             .then((r) => {
                 completeStage(summaryId, 'viva', { count: r.length });
@@ -572,11 +546,10 @@ export const runIntelligencePipeline = async ({
         const mindmapP = generateMindMap({
             chapters: finalChapters.chapters,
             settings,
+            chain,
         })
             .then((r) => {
-                completeStage(summaryId, 'mindmap', {
-                    hasMermaid: !!r.mermaid,
-                });
+                completeStage(summaryId, 'mindmap', { hasMermaid: !!r.mermaid });
                 return r;
             })
             .catch((err) => {
@@ -599,8 +572,7 @@ export const runIntelligencePipeline = async ({
                     completeStage(summaryId, 'diagrams', {
                         count: r.diagrams.length,
                     });
-                    insightsSoFar.diagramCount =
-                        merged.diagrams.length + r.diagrams.length;
+                    insightsSoFar.diagramCount = r.diagrams.length;
                     publishInsights(summaryId, { ...insightsSoFar });
                 }
                 return r.diagrams;
@@ -611,37 +583,66 @@ export const runIntelligencePipeline = async ({
             });
 
         const [flashcards, quiz, vivaQuestions, mindmap, visionDiagrams] =
-            await Promise.all([
-                flashcardP,
-                quizP,
-                vivaP,
-                mindmapP,
-                diagramsP,
-            ]);
+            await Promise.all([flashcardP, quizP, vivaP, mindmapP, diagramsP]);
 
-        // ── compose ─────────────────────────────────────────────────────
+        // ── 12. compose (LOCAL — no AI) ────────────────────────────────
         startStage(summaryId, 'compose');
-        // Use chapter `concepts` from the merged result as the keyConcepts
-        // bag for the final document. We don't currently run an enrichment
-        // pass on these — they're already short.
-        const keyConcepts = merged.concepts.map((c) => ({
+
+        // Build the enriched shapes. V3: definitions / formulas / examples
+        // come straight from the merged chunk JSON, NOT from a separate
+        // enrichment call. The viewer's RichCardsView handles the simpler
+        // shape gracefully (empty optional fields just don't render).
+        const enrichedDefinitions = merged.definitions.map((d) => ({
+            term: d.title,
+            definition: d.content,
+            // V2 also tried to fill simpleExplanation / analogy / importance /
+            // examQuestion / interviewQuestion via a separate AI call. V3
+            // drops those fields rather than burning tokens on enrichment;
+            // they remain on the schema as optional defaults.
+            simpleExplanation: '',
+            analogy: '',
+            importance: '',
+            examQuestion: '',
+            interviewQuestion: '',
+        }));
+
+        const enrichedFormulas = merged.formulas.map((f) => {
+            const raw = f.raw || {};
+            return {
+                name: raw.name || f.title,
+                expression: raw.expression || '',
+                variables: raw.variables || '',
+                explanation: raw.notes || '',
+                example: '',
+                examImportance: 'medium',
+                interviewImportance: 'medium',
+            };
+        });
+
+        const enrichedExamples = merged.examples.map((e) => ({
+            title: e.title,
+            conceptExample: e.content,
+            realWorldExample: '',
+            examExample: '',
+            interviewExample: '',
+        }));
+
+        const keyConcepts = merged.keyConcepts.map((c) => ({
             title: c.title,
             explanation: c.content,
         }));
 
-        // Merge text-mentioned diagrams with vision-detected diagrams. The
-        // vision side is empty today (NVIDIA pipeline not yet enabled) but
-        // the structure is in place so enabling it doesn't require any
-        // further changes here.
-        const allDiagrams = [
-            ...merged.diagrams,
-            ...(visionDiagrams || []).map((d) => ({
-                title: d.title,
-                content: [d.description, d.mermaid && `\n\n\`\`\`mermaid\n${d.mermaid}\n\`\`\``]
-                    .filter(Boolean)
-                    .join(''),
-            })),
-        ];
+        // Merge text-mentioned diagrams (none today — V3 dropped the per-
+        // chunk diagram extraction) with vision-detected ones.
+        const allDiagrams = (visionDiagrams || []).map((d) => ({
+            title: d.title,
+            content: [
+                d.description,
+                d.mermaid && `\n\n\`\`\`mermaid\n${d.mermaid}\n\`\`\``,
+            ]
+                .filter(Boolean)
+                .join(''),
+        }));
 
         const composed = composeFinalDoc({
             finalChapters,
@@ -649,7 +650,8 @@ export const runIntelligencePipeline = async ({
             enrichedFormulas,
             enrichedExamples,
             keyConcepts,
-            tips,
+            tips: merged.examTips,
+            importantPoints: merged.importantPoints,
             mindmap,
             settings,
             diagrams: allDiagrams,
@@ -666,13 +668,19 @@ export const runIntelligencePipeline = async ({
             vivaQuestions,
             diagrams: allDiagrams.length,
             rawMarkdown: composed.rawMarkdown,
-            targetWords,
+            targetWords: settingsTarget,
         });
         completeStage(summaryId, 'compose');
 
-        // Final pipeline event with the consolidated insights so any SSE
-        // client that joined late gets the full picture in one message.
-        completePipeline(summaryId, { insights });
+        // Final pipeline event so SSE clients get the consolidated insights
+        // in one message (useful for late subscribers).
+        completePipeline(summaryId, {
+            insights,
+            provider: {
+                activeProviders: chain.getActiveProviders(),
+                disabledProviders: chain.getDisabledProviders(),
+            },
+        });
 
         return {
             chapters: composed.chapters,
@@ -683,7 +691,7 @@ export const runIntelligencePipeline = async ({
             richFormulas: enrichedFormulas,
             richExamples: enrichedExamples,
             keyConcepts,
-            examTips: tips,
+            examTips: merged.examTips,
             flashcards,
             quiz,
             vivaQuestions,
@@ -691,8 +699,6 @@ export const runIntelligencePipeline = async ({
             insights,
         };
     } catch (err) {
-        // Catastrophic failure — surface it to subscribers and rethrow so
-        // the controller can flip the AISummary status to 'failed'.
         failPipeline(summaryId, err);
         throw err;
     }

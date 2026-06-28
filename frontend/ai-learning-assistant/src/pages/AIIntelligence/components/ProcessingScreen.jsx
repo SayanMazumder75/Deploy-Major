@@ -48,19 +48,27 @@ import aiIntelligenceService from '../../../services/aiIntelligenceService';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STAGE_ICONS = {
+    // V3 stages (12-stage plan)
     ingest: Upload,
+    ocr: FileSearch,
     chunk: Layers,
-    extract: FileText,
+    extract: BrainCircuit,
+    merge: Layers,
+    rewrite: PenSquare,
+    flashcards: PenSquare,
+    quiz: HelpCircle,
+    viva: Mic,
+    mindmap: Network,
+    diagrams: ImageIcon,
+    compose: FileSearch,
+    // V2 stages retained so legacy SSE replays (from in-flight pipelines
+    // started before this deploy) still render their dedicated icons
+    // instead of falling back to the default.
     chapters: BookMarked,
     definitions: Tag,
     formulas: Calculator,
     examples: BookOpen,
     tips: GraduationCap,
-    flashcards: PenSquare,
-    quiz: HelpCircle,
-    viva: Mic,
-    mindmap: Network,
-    compose: FileSearch,
 };
 
 const STAGE_GRADIENTS = [
