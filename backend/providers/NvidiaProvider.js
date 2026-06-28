@@ -20,7 +20,7 @@
 
 import { BaseProvider, ProviderError } from './BaseProvider.js';
 
-const DEFAULT_MODEL = 'nvidia/llama-3.1-nemotron-ultra-253b-v1';
+const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
 const ENDPOINT =
     process.env.NVIDIA_API_BASE_URL ||
     'https://integrate.api.nvidia.com/v1/chat/completions';
