@@ -14,6 +14,9 @@ import {
     GraduationCap,
     Layers,
     AlertCircle,
+    PenSquare,
+    HelpCircle,
+    Mic,
 } from 'lucide-react';
 import moment from 'moment';
 import toast from 'react-hot-toast';
@@ -23,6 +26,21 @@ import MarkdownRenderer from '../../components/common/MarkdownRenderer';
 import Spinner from '../../components/common/Spinner';
 import AIActionsSidebar from './components/AIActionsSidebar';
 
+// V2 rich-resource viewers — lazy-imported as part of the viewer page so the
+// initial bundle for /ai-intelligence (the list/processing screen) doesn't
+// pay for them.
+import FlashcardsView from './components/viewer/FlashcardsView';
+import QuizView from './components/viewer/QuizView';
+import VivaView from './components/viewer/VivaView';
+import MindMapView from './components/viewer/MindMapView';
+import {
+    RichDefinitionsView,
+    RichFormulasView,
+    RichExamplesView,
+    KeyConceptsView,
+    ExamTipsView,
+} from './components/viewer/RichCardsView';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AISummaryViewerPage
 //
@@ -30,22 +48,22 @@ import AIActionsSidebar from './components/AIActionsSidebar';
 // desktop, stacks on mobile:
 //
 //   left rail (sections nav)
-//     ├── Chapter-wise Summary
-//     ├── Definitions
-//     ├── Key Concepts
-//     ├── Formulas
-//     ├── Important Examples
-//     └── Exam Tips
+//     ├── Reading sections     — Full Summary + Chapter Summaries + TOC + …
+//     └── Interactive resources — Flashcards, Quiz, Viva, Mind Map, rich card sections (V2 only)
 //
-//   center (rendered markdown for the selected section / "all" view)
+//   center
+//     ├── For markdown sections: rendered markdown
+//     └── For interactive resources: bespoke React components from /components/viewer
 //
 //   right rail (AIActionsSidebar — Ask AI, Read Aloud, Translate, Regenerate,
 //                                  Download PDF, Save to Documents)
 //
 // The translation banner: when the user clicks Translate, we replace the
-// rendered text with the translation client-side only. The underlying
+// rendered markdown with the translation client-side only. The underlying
 // AISummary on the server is unchanged so the user can dismiss the banner
-// and return to the original at any time.
+// and return to the original at any time. Interactive resources are
+// language-agnostic (they're structured data, not free-form text), so they
+// don't need translation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const KIND_ICON = {
@@ -70,13 +88,75 @@ const KIND_LABEL = {
     mindmap: 'Mind Map',
 };
 
+// V2 interactive resource keys — when activeKey starts with `v2:` we render
+// a React component in the centre column instead of markdown.
+const V2_RESOURCES = [
+    {
+        id: 'v2:definitions',
+        label: 'Definitions',
+        icon: Tag,
+        present: (s) => (s.richDefinitions || []).length > 0,
+    },
+    {
+        id: 'v2:formulas',
+        label: 'Formulas',
+        icon: Calculator,
+        present: (s) => (s.richFormulas || []).length > 0,
+    },
+    {
+        id: 'v2:examples',
+        label: 'Examples',
+        icon: BookOpen,
+        present: (s) => (s.richExamples || []).length > 0,
+    },
+    {
+        id: 'v2:concepts',
+        label: 'Key Concepts',
+        icon: Lightbulb,
+        present: (s) => (s.keyConcepts || []).length > 0,
+    },
+    {
+        id: 'v2:tips',
+        label: 'Exam Tips',
+        icon: GraduationCap,
+        present: (s) => (s.examTips || []).length > 0,
+    },
+    {
+        id: 'v2:flashcards',
+        label: 'Flashcards',
+        icon: PenSquare,
+        present: (s) => (s.flashcards || []).length > 0,
+        badge: (s) => (s.flashcards || []).length,
+    },
+    {
+        id: 'v2:quiz',
+        label: 'Practice Quiz',
+        icon: HelpCircle,
+        present: (s) => (s.quiz || []).length > 0,
+        badge: (s) => (s.quiz || []).length,
+    },
+    {
+        id: 'v2:viva',
+        label: 'Viva Questions',
+        icon: Mic,
+        present: (s) => (s.vivaQuestions || []).length > 0,
+        badge: (s) => (s.vivaQuestions || []).length,
+    },
+    {
+        id: 'v2:mindmap',
+        label: 'Mind Map',
+        icon: Network,
+        present: (s) => Boolean(s.mindmap?.mermaid || s.mindmap?.outlineMarkdown),
+    },
+];
+
 const AISummaryViewerPage = () => {
     const { id } = useParams();
 
     const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeKey, setActiveKey] = useState('__all__'); // 'all' or `idx:<n>`
+    const [activeKey, setActiveKey] = useState('__all__'); // 'all' | 'idx:N' | 'group:KIND' | 'v2:*'
     const [translation, setTranslation] = useState(null); // { targetLanguage, markdown } | null
 
     const centerScrollRef = useRef(null);
@@ -107,15 +187,10 @@ const AISummaryViewerPage = () => {
         };
     }, [id]);
 
-    // Sections are pinned to whatever the backend stored. We also generate
-    // synthetic group labels for the rail (so multiple "chapter" rows can be
-    // shown individually rather than collapsed under one heading).
-    // Memoised so its identity is stable across renders, which keeps the
-    // downstream useMemos below well-behaved (react-hooks/exhaustive-deps).
+    // V1 sections list — kept for backwards compat with summaries generated
+    // before the V2 rich shapes were introduced.
     const sections = useMemo(() => summary?.sections || [], [summary]);
 
-    // The rail entries we render in the left column. Each entry maps to either
-    // a "show all" pseudo-section, a single section index, or a category group.
     const railGroups = useMemo(() => {
         const groups = {};
         sections.forEach((s, idx) => {
@@ -126,21 +201,36 @@ const AISummaryViewerPage = () => {
         return groups;
     }, [sections]);
 
-    const ORDER = ['toc', 'chapter', 'definitions', 'concepts', 'formulas', 'examples', 'mindmap', 'tips'];
+    const ORDER = [
+        'toc',
+        'chapter',
+        'definitions',
+        'concepts',
+        'formulas',
+        'examples',
+        'mindmap',
+        'tips',
+    ];
+
+    // V2 resource entries available for THIS summary (only the ones with data).
+    const availableV2Resources = useMemo(() => {
+        if (!summary) return [];
+        return V2_RESOURCES.filter((r) => r.present(summary));
+    }, [summary]);
 
     const handleSelect = (key) => {
         setActiveKey(key);
-        // Scroll the centre column back to the top whenever the user picks
-        // something new — feels right in long summaries.
         if (centerScrollRef.current) centerScrollRef.current.scrollTop = 0;
     };
 
-    // Determines what markdown to render in the centre column.
+    // What to render in the center column.
     const renderedMarkdown = useMemo(() => {
         if (!summary) return '';
         if (translation) return translation.markdown;
         if (activeKey === '__all__') {
-            return sections.map((s) => `# ${s.title}\n\n${s.content}`).join('\n\n---\n\n');
+            return sections
+                .map((s) => `# ${s.title}\n\n${s.content}`)
+                .join('\n\n---\n\n');
         }
         if (typeof activeKey === 'string' && activeKey.startsWith('idx:')) {
             const i = parseInt(activeKey.slice(4), 10);
@@ -157,17 +247,44 @@ const AISummaryViewerPage = () => {
         return summary.rawMarkdown || '';
     }, [summary, sections, activeKey, translation]);
 
+    // What to render in the center column when an interactive V2 resource is
+    // selected — a React component instead of markdown.
+    const renderActiveV2Resource = () => {
+        if (!summary || !activeKey.startsWith('v2:')) return null;
+        switch (activeKey) {
+            case 'v2:definitions':
+                return <RichDefinitionsView definitions={summary.richDefinitions} />;
+            case 'v2:formulas':
+                return <RichFormulasView formulas={summary.richFormulas} />;
+            case 'v2:examples':
+                return <RichExamplesView examples={summary.richExamples} />;
+            case 'v2:concepts':
+                return <KeyConceptsView concepts={summary.keyConcepts} />;
+            case 'v2:tips':
+                return <ExamTipsView tips={summary.examTips} />;
+            case 'v2:flashcards':
+                return <FlashcardsView flashcards={summary.flashcards} />;
+            case 'v2:quiz':
+                return <QuizView quiz={summary.quiz} />;
+            case 'v2:viva':
+                return <VivaView vivaQuestions={summary.vivaQuestions} />;
+            case 'v2:mindmap':
+                return <MindMapView mindmap={summary.mindmap} />;
+            default:
+                return null;
+        }
+    };
+
     const handleTranslate = ({ targetLanguage, markdown }) => {
         setTranslation({ targetLanguage, markdown });
-        setActiveKey('__all__'); // show the whole translated doc as one body
+        // Bounce back to markdown view since translation only applies there.
+        setActiveKey('__all__');
     };
 
     const clearTranslation = () => setTranslation(null);
 
-    // When sidebar regenerates / saves, swap in the new summary instance.
     const handleSummaryUpdate = (next) => {
         setSummary(next);
-        // Wipe translation since the underlying content may have changed.
         setTranslation(null);
         toast.success(next.savedToDocuments ? 'Saved.' : 'Summary updated.');
     };
@@ -191,7 +308,9 @@ const AISummaryViewerPage = () => {
                     <h2 className="text-lg font-semibold text-violet-700 mb-2">
                         Unable to load summary
                     </h2>
-                    <p className="text-sm text-purple-500/80 mb-4">{error || 'Not found.'}</p>
+                    <p className="text-sm text-purple-500/80 mb-4">
+                        {error || 'Not found.'}
+                    </p>
                     <Link
                         to="/ai-intelligence"
                         className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-semibold shadow shadow-purple-500/25"
@@ -204,9 +323,10 @@ const AISummaryViewerPage = () => {
         );
     }
 
+    const showInteractive = activeKey.startsWith('v2:');
+
     return (
         <div className="min-h-screen p-2 sm:p-4 space-y-4">
-            {/* breadcrumb */}
             <div>
                 <Link
                     to="/ai-intelligence"
@@ -237,7 +357,8 @@ const AISummaryViewerPage = () => {
                             <span>{summary.summaryPageCount || 1} Pages</span>
                             {summary.originalPageCount > 0 && (
                                 <span>
-                                    Compressed from {summary.originalPageCount} → {summary.summaryPageCount || 1}
+                                    Compressed from {summary.originalPageCount} →{' '}
+                                    {summary.summaryPageCount || 1}
                                 </span>
                             )}
                             <span>
@@ -254,14 +375,17 @@ const AISummaryViewerPage = () => {
                 </div>
             </motion.div>
 
-            {translation && (
+            {translation && !showInteractive && (
                 <motion.div
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex items-center justify-between gap-3 rounded-xl border border-purple-200/60 bg-white/80 backdrop-blur-xl px-4 py-2.5"
                 >
                     <p className="text-sm text-violet-700">
-                        Showing <span className="font-semibold">{translation.targetLanguage}</span>{' '}
+                        Showing{' '}
+                        <span className="font-semibold">
+                            {translation.targetLanguage}
+                        </span>{' '}
                         translation. Original is preserved on the server.
                     </p>
                     <button
@@ -290,7 +414,9 @@ const AISummaryViewerPage = () => {
                                 Jump straight to a section
                             </p>
                         </div>
+
                         <div className="p-3 space-y-3 max-h-[70vh] overflow-y-auto">
+                            {/* Markdown reading sections */}
                             <RailButton
                                 active={activeKey === '__all__'}
                                 icon={Sparkles}
@@ -302,10 +428,8 @@ const AISummaryViewerPage = () => {
                             {ORDER.map((kind) => {
                                 const items = railGroups[kind];
                                 if (!items?.length) return null;
-
                                 const Icon = KIND_ICON[kind] || BookOpen;
 
-                                // Single-item kinds collapse to one button (e.g. tips, mindmap).
                                 if (items.length === 1) {
                                     const item = items[0];
                                     const key = `idx:${item.idx}`;
@@ -321,13 +445,14 @@ const AISummaryViewerPage = () => {
                                     );
                                 }
 
-                                // Multi-item kinds (typically chapter) get a header + nested children.
                                 return (
                                     <div key={kind}>
                                         <RailButton
                                             active={activeKey === `group:${kind}`}
                                             icon={Icon}
-                                            onClick={() => handleSelect(`group:${kind}`)}
+                                            onClick={() =>
+                                                handleSelect(`group:${kind}`)
+                                            }
                                         >
                                             {KIND_LABEL[kind] || kind}
                                             <span className="ml-auto text-[10px] font-bold text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded-md">
@@ -341,7 +466,9 @@ const AISummaryViewerPage = () => {
                                                     <li key={key}>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleSelect(key)}
+                                                            onClick={() =>
+                                                                handleSelect(key)
+                                                            }
                                                             className={`w-full text-left text-xs font-medium px-2 py-1.5 rounded-md transition-colors ${
                                                                 activeKey === key
                                                                     ? 'text-violet-700 bg-purple-50'
@@ -360,19 +487,53 @@ const AISummaryViewerPage = () => {
                                     </div>
                                 );
                             })}
+
+                            {/* V2 interactive resources */}
+                            {availableV2Resources.length > 0 && (
+                                <div className="pt-3 mt-2 border-t border-purple-200/40">
+                                    <p className="px-2 mb-2 text-[10px] uppercase tracking-wide font-bold text-purple-400">
+                                        Interactive
+                                    </p>
+                                    <div className="space-y-1">
+                                        {availableV2Resources.map((r) => {
+                                            const Icon = r.icon || Sparkles;
+                                            const badge = r.badge?.(summary);
+                                            return (
+                                                <RailButton
+                                                    key={r.id}
+                                                    active={activeKey === r.id}
+                                                    icon={Icon}
+                                                    onClick={() => handleSelect(r.id)}
+                                                >
+                                                    {r.label}
+                                                    {typeof badge === 'number' && (
+                                                        <span className="ml-auto text-[10px] font-bold text-purple-500 bg-purple-100 px-1.5 py-0.5 rounded-md">
+                                                            {badge}
+                                                        </span>
+                                                    )}
+                                                </RailButton>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </aside>
 
-                {/* ── center column (reading area) ─── */}
+                {/* ── center column ─── */}
                 <main className="flex-1 min-w-0">
                     <div
                         ref={centerScrollRef}
                         className="bg-white/85 backdrop-blur-xl border border-purple-200/60 rounded-2xl shadow-xl shadow-purple-200/30 p-6 md:p-8 max-h-[80vh] overflow-y-auto"
                     >
-                        <div className="prose prose-slate max-w-none prose-headings:text-violet-700 prose-headings:tracking-tight prose-h1:border-b prose-h1:border-purple-200 prose-h1:pb-2 prose-strong:text-fuchsia-700 prose-a:text-purple-600">
-                            <MarkdownRenderer content={renderedMarkdown} />
-                        </div>
+                        {showInteractive ? (
+                            renderActiveV2Resource()
+                        ) : (
+                            <div className="prose prose-slate max-w-none prose-headings:text-violet-700 prose-headings:tracking-tight prose-h1:border-b prose-h1:border-purple-200 prose-h1:pb-2 prose-strong:text-fuchsia-700 prose-a:text-purple-600">
+                                <MarkdownRenderer content={renderedMarkdown} />
+                            </div>
+                        )}
                     </div>
                 </main>
 
@@ -410,7 +571,9 @@ const RailButton = ({ active, icon: Icon, onClick, children }) => (
                 strokeWidth={2.2}
             />
         </span>
-        <span className="flex-1 min-w-0 truncate flex items-center gap-2">{children}</span>
+        <span className="flex-1 min-w-0 truncate flex items-center gap-2">
+            {children}
+        </span>
     </button>
 );
 

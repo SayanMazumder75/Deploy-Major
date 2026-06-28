@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrainCircuit, Sparkles, Wand2, ArrowRight } from 'lucide-react';
@@ -42,7 +42,7 @@ const AIIntelligencePage = () => {
     // generation state
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
     const [source, setSource] = useState(null);
-    const [generationDone, setGenerationDone] = useState(false);
+    const [pendingSummaryId, setPendingSummaryId] = useState(null);
     const [activeSummary, setActiveSummary] = useState(null);
     const [generating, setGenerating] = useState(false);
 
@@ -99,14 +99,17 @@ const AIIntelligencePage = () => {
             toast.error('Pick a document or upload a PDF first.');
             return;
         }
-        setGenerationDone(false);
         setActiveSummary(null);
+        setPendingSummaryId(null);
         setView('processing');
         setGenerating(true);
 
         try {
-            // Fire-and-await — the ProcessingScreen runs its own animated bars
-            // independently, and "isComplete" flips when this promise resolves.
+            // V2 contract: backend returns immediately with `{ summaryId,
+            // status: 'processing', stagePlan }`. The ProcessingScreen
+            // subscribes to SSE for live progress; when the pipeline emits
+            // `pipeline:complete`, we fetch the full doc and transition to
+            // the results dashboard.
             const res = await aiIntelligenceService.generate({
                 source:
                     source.kind === 'file'
@@ -114,25 +117,46 @@ const AIIntelligencePage = () => {
                         : { documentId: source.documentId, title: source.label },
                 settings,
             });
-            const summary = res?.data;
-            if (!summary) throw new Error('Generation returned no data.');
-            setActiveSummary(summary);
-            setGenerationDone(true);
-            // Refresh history so the new row appears underneath without a
-            // full page reload.
+            const summaryId = res?.data?.summaryId;
+            if (!summaryId) throw new Error('Generation did not return a summary id.');
+            setPendingSummaryId(summaryId);
+            // Refresh history so the new "Processing…" row appears underneath.
             fetchHistory();
         } catch (err) {
             console.error('AI summary generation failed:', err);
             toast.error(err?.message || err?.error || 'Failed to generate summary.');
+            setView('idle');
+            setGenerating(false);
+        }
+    };
+
+    // Called by ProcessingScreen when the SSE stream emits pipeline:complete.
+    const handleProcessingComplete = async () => {
+        if (!pendingSummaryId) return;
+        try {
+            const res = await aiIntelligenceService.getById(pendingSummaryId);
+            const summary = res?.data;
+            if (!summary) throw new Error('Generation completed but the summary could not be loaded.');
+            setActiveSummary(summary);
+            setView('results');
+            fetchHistory();
+        } catch (err) {
+            console.error('Post-completion fetch failed:', err);
+            toast.error(err?.message || 'Failed to load the generated summary.');
             setView('idle');
         } finally {
             setGenerating(false);
         }
     };
 
-    // Called by ProcessingScreen when its bars have all snapped to 100%.
-    const handleProcessingComplete = () => {
-        if (activeSummary) setView('results');
+    // Called by ProcessingScreen when the SSE stream emits pipeline:failed.
+    const handleProcessingFailed = (errMsg) => {
+        toast.error(`Generation failed: ${errMsg || 'unknown error'}`);
+        setView('idle');
+        setGenerating(false);
+        // History row still exists in 'failed' state — refresh it so the
+        // history list shows the correct status pill.
+        fetchHistory();
     };
 
     // Results dashboard → "View Summary"
@@ -177,7 +201,7 @@ const AIIntelligencePage = () => {
     // Results dashboard → "Generate Again"
     const handleGenerateAgain = () => {
         setActiveSummary(null);
-        setGenerationDone(false);
+        setPendingSummaryId(null);
         setView('idle');
     };
 
@@ -192,12 +216,6 @@ const AIIntelligencePage = () => {
             toast.error(err?.message || 'Delete failed.', { id: tid });
         }
     };
-
-    // ── derived ──────────────────────────────────────────────────────────────
-    const realInsights = useMemo(
-        () => (generationDone && activeSummary ? activeSummary.insights : null),
-        [generationDone, activeSummary]
-    );
 
     // ── render ───────────────────────────────────────────────────────────────
     return (
@@ -263,10 +281,10 @@ const AIIntelligencePage = () => {
                         transition={{ duration: 0.25 }}
                     >
                         <ProcessingScreen
+                            summaryId={pendingSummaryId}
                             fileLabel={sourceLabel}
-                            isComplete={generationDone}
-                            realInsights={realInsights}
-                            onAllStagesComplete={handleProcessingComplete}
+                            onPipelineComplete={handleProcessingComplete}
+                            onPipelineFailed={handleProcessingFailed}
                         />
                     </motion.div>
                 )}

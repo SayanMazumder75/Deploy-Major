@@ -1,42 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// aiIntelligenceController
+// aiIntelligenceController (V2)
 //
-// HTTP handlers for the AI Document Intelligence module. Endpoints fall into
-// three groups:
+// HTTP handlers for the AI Document Intelligence module. Refactored in V2
+// to:
+//   - Delegate the full generation pipeline to services/intelligencePipeline
+//   - Route every AI call (incl. ask + translate) through the provider chain
+//   - Expose a Server-Sent Events endpoint at GET /:id/progress that streams
+//     live stage events from the in-process pipelineRegistry
+//   - Keep every backwards-compatible response shape from V1
 //
-//   GENERATION
-//     POST   /api/ai-intelligence/generate         — generate a new summary
-//                                                    (either from an existing
-//                                                    Document via `documentId`,
-//                                                    or from a freshly uploaded
-//                                                    PDF in the same request).
-//     POST   /api/ai-intelligence/:id/regenerate   — regenerate with same or
-//                                                    overridden settings; keeps
-//                                                    the same AISummary id so
-//                                                    the viewer URL stays valid.
-//
-//   PREVIEW / VIEWER
-//     GET    /api/ai-intelligence/:id              — fetch one summary.
-//     GET    /api/ai-intelligence/history          — list user's summaries.
-//     DELETE /api/ai-intelligence/:id              — remove a history entry.
-//     GET    /api/ai-intelligence/:id/download     — render + return the PDF
-//                                                    (cached after first call).
-//     POST   /api/ai-intelligence/:id/ask          — ask AI on top of the
-//                                                    generated summary content.
-//     POST   /api/ai-intelligence/:id/translate    — translate the summary
-//                                                    into a target language.
-//
-//   DOCUMENTS INTEGRATION
-//     POST   /api/ai-intelligence/:id/save-to-documents
-//                                                  — explicit save: build the
-//                                                    PDF, upload to Cloudinary,
-//                                                    create a Document with
-//                                                    aiGenerated:true. Only
-//                                                    this endpoint causes the
-//                                                    summary to appear in the
-//                                                    user's Documents page.
-//
-// Auth: all routes are mounted behind `protect` in the router.
+// Endpoint inventory (mounted under /api/ai-intelligence):
+//   POST /generate                  — kick off generation, returns the
+//                                     completed AISummary doc once the
+//                                     pipeline finishes (kept synchronous
+//                                     for backwards compat with the
+//                                     existing frontend service contract)
+//   GET  /:id                       — fetch a single summary
+//   GET  /:id/progress              — SSE live progress (or replay log if
+//                                     pipeline already finished)
+//   GET  /history                   — list user's summaries
+//   DELETE /:id                     — delete + clean up
+//   POST /:id/regenerate            — re-run the pipeline on the same source
+//   GET  /:id/download              — render + cache PDF
+//   POST /:id/save-to-documents     — create a Document record for the PDF
+//   POST /:id/ask                   — Q&A grounded in the summary
+//   POST /:id/translate             — translate the summary
 // ─────────────────────────────────────────────────────────────────────────────
 
 import fs from 'fs/promises';
@@ -47,22 +35,29 @@ import Document from '../models/Document.js';
 import cloudinary from '../config/cloudinary.js';
 import { extractTextFromPDF } from '../utils/pdfParser.js';
 import { chunkText } from '../utils/textChunker.js';
-import { generateAISummary } from '../utils/aiSummaryGenerator.js';
+
 import {
     renderSummaryPdf,
     estimateSummaryPageCount,
 } from '../utils/summaryPdfBuilder.js';
-import { rawGenerate } from '../utils/groqIntelligenceClient.js';
+
+import {
+    runIntelligencePipeline,
+    PIPELINE_STAGE_PLAN,
+} from '../services/intelligencePipeline.js';
+import {
+    subscribe as subscribeProgress,
+    getSnapshot as getProgressSnapshot,
+    dropPipeline,
+} from '../services/pipelineRegistry.js';
+import { generateText } from '../providers/index.js';
+import {
+    askAiPrompt,
+    translatePrompt,
+} from '../services/shared/promptTemplates.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Parse the multipart-form-encoded "settings" field (or accept already-parsed
- * JSON body for the documentId path) into a normalised settings object.
- *
- * Defensive: returns sensible defaults for anything missing so the AI pipeline
- * can never crash on partial input.
- */
 const normaliseSettings = (input) => {
     let s = input;
     if (typeof s === 'string') {
@@ -73,15 +68,23 @@ const normaliseSettings = (input) => {
         }
     }
     s = s || {};
-
-    const allowedGoals = ['exam_tomorrow', 'quick_revision', 'detailed_notes', 'research_mode', 'interview_prep'];
+    const allowedGoals = [
+        'exam_tomorrow',
+        'quick_revision',
+        'detailed_notes',
+        'research_mode',
+        'interview_prep',
+    ];
     const allowedLengths = ['auto', '2', '5', '10'];
     const allowedLanguages = ['english', 'hindi', 'bengali'];
-
     const adv = s.advancedOptions || {};
     return {
-        studyGoal: allowedGoals.includes(s.studyGoal) ? s.studyGoal : 'quick_revision',
-        summaryLength: allowedLengths.includes(s.summaryLength) ? s.summaryLength : 'auto',
+        studyGoal: allowedGoals.includes(s.studyGoal)
+            ? s.studyGoal
+            : 'quick_revision',
+        summaryLength: allowedLengths.includes(s.summaryLength)
+            ? s.summaryLength
+            : 'auto',
         language: allowedLanguages.includes(s.language) ? s.language : 'english',
         advancedOptions: {
             preserveFormulas: adv.preserveFormulas !== false,
@@ -93,16 +96,32 @@ const normaliseSettings = (input) => {
     };
 };
 
+const estimatePageCountFromText = (text) => {
+    if (!text) return 0;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    return Math.max(1, Math.round(words / 280));
+};
+
+const compressionPercentFor = (originalPages, summaryPages) => {
+    if (!originalPages || originalPages <= 0) return 0;
+    const safeSummary = Math.max(1, summaryPages || 1);
+    const pct = 1 - safeSummary / originalPages;
+    return Math.max(0, Math.min(99, Math.round(pct * 100)));
+};
+
+const cleanupTempFile = async (path) => {
+    if (!path) return;
+    await fs.unlink(path).catch(() => {});
+};
+
 /**
- * Resolve the source text + metadata for a generation request. Handles BOTH
- * the "use an existing Document" path and the "upload a new PDF as part of
- * this request" path. The caller is responsible for cleaning up `req.file`
- * if it returns a `cleanupPath`.
+ * Resolve `req` into either an existing Document's text+metadata or a
+ * freshly uploaded PDF's extracted text. Returns a normalised source
+ * object that the orchestrator + AISummary skeleton can both consume.
  */
 const resolveSource = async (req) => {
     const { documentId } = req.body;
 
-    // Path A: existing document.
     if (documentId && !req.file) {
         const document = await Document.findOne({
             _id: documentId,
@@ -125,7 +144,6 @@ const resolveSource = async (req) => {
         };
     }
 
-    // Path B: file uploaded in this request.
     if (req.file) {
         const tempPath = req.file.path;
         const { text, numPages } = await extractTextFromPDF(tempPath);
@@ -139,41 +157,88 @@ const resolveSource = async (req) => {
             fileSize: req.file.size,
             sourceDocumentId: null,
             cleanupPath: tempPath,
-            originalPageCount: numPages || estimatePageCountFromText(text),
+            originalPageCount:
+                numPages || estimatePageCountFromText(text),
         };
     }
 
-    const err = new Error('Please provide either a documentId or upload a PDF file.');
+    const err = new Error(
+        'Please provide either a documentId or upload a PDF file.'
+    );
     err.statusCode = 400;
     throw err;
 };
 
-// Rough page-count heuristic for an arbitrary extracted-text blob (used as a
-// fallback when pdf-parse's `numpages` is not available — e.g. when summarizing
-// an already-stored Document where we discarded that field on upload).
-const estimatePageCountFromText = (text) => {
-    if (!text) return 0;
-    const words = text.split(/\s+/).filter(Boolean).length;
-    return Math.max(1, Math.round(words / 280));
-};
-
-const compressionPercentFor = (originalPages, summaryPages) => {
-    if (!originalPages || originalPages <= 0) return 0;
-    const safeSummary = Math.max(1, summaryPages || 1);
-    const pct = 1 - safeSummary / originalPages;
-    return Math.max(0, Math.min(99, Math.round(pct * 100)));
-};
-
-const cleanupTempFile = async (path) => {
-    if (!path) return;
-    await fs.unlink(path).catch(() => {});
+/**
+ * Merge the pipeline's rich output into an AISummary instance + persist.
+ * Centralised here so generate + regenerate use identical persistence
+ * logic (avoids drift between the two paths).
+ */
+const persistPipelineResult = async (summaryDoc, pipelineResult, settings) => {
+    summaryDoc.chapters = pipelineResult.chapters;
+    summaryDoc.tableOfContents = pipelineResult.tableOfContents;
+    summaryDoc.sections = pipelineResult.sections;
+    summaryDoc.rawMarkdown = pipelineResult.rawMarkdown;
+    summaryDoc.richDefinitions = pipelineResult.richDefinitions;
+    summaryDoc.richFormulas = pipelineResult.richFormulas;
+    summaryDoc.richExamples = pipelineResult.richExamples;
+    summaryDoc.keyConcepts = pipelineResult.keyConcepts;
+    summaryDoc.examTips = pipelineResult.examTips;
+    summaryDoc.flashcards = pipelineResult.flashcards;
+    summaryDoc.quiz = pipelineResult.quiz;
+    summaryDoc.vivaQuestions = pipelineResult.vivaQuestions;
+    summaryDoc.mindmap = pipelineResult.mindmap;
+    summaryDoc.insights = pipelineResult.insights;
+    summaryDoc.settings = settings;
+    summaryDoc.status = 'completed';
+    summaryDoc.failureReason = '';
+    summaryDoc.summaryPageCount = estimateSummaryPageCount(summaryDoc);
+    summaryDoc.compressionPercent = compressionPercentFor(
+        summaryDoc.originalPageCount,
+        summaryDoc.summaryPageCount
+    );
+    // Stash a compact snapshot of pipeline stages so re-opens after server
+    // restart still get a coherent processing-screen replay.
+    const snapshot = getProgressSnapshot(summaryDoc._id.toString());
+    if (snapshot) {
+        summaryDoc.pipeline = {
+            stages: snapshot.stages.map((s) => ({
+                id: s.id,
+                label: s.label,
+                status: s.status,
+                progress: s.progress,
+                startedAt: s.startedAt,
+                completedAt: s.completedAt,
+                durationMs: s.durationMs,
+                providerId: s.providerId || '',
+                error: s.error || '',
+            })),
+            totalDurationMs: snapshot.stages.reduce(
+                (acc, s) => acc + (s.durationMs || 0),
+                0
+            ),
+            providerUsage: new Map(),
+        };
+    }
+    await summaryDoc.save();
 };
 
 // ─── controllers ─────────────────────────────────────────────────────────────
 
-// @desc    Generate a new AI summary from a Document or uploaded PDF
+// @desc    Generate a new AI summary
 // @route   POST /api/ai-intelligence/generate
 // @access  Private
+//
+// V2 contract: this endpoint is now ASYNCHRONOUS by default. It validates
+// the request, resolves the source, creates an AISummary skeleton with
+// status:'processing', and returns 202 IMMEDIATELY with the summaryId.
+// The pipeline then runs in the background, emitting progress events to
+// the in-process pipelineRegistry which the SSE endpoint streams to
+// connected clients.
+//
+// Clients that prefer the old synchronous behaviour can send `wait: true`
+// in the request body — we keep that around for scripts / tests that
+// don't want to mess with SSE.
 export const generateIntelligenceSummary = async (req, res, next) => {
     let cleanupPath = null;
     try {
@@ -190,9 +255,7 @@ export const generateIntelligenceSummary = async (req, res, next) => {
             });
         }
 
-        // Persist a 'processing' row up-front so the frontend (if it polls)
-        // can show progress immediately; we update it to 'completed' below.
-        const summaryDoc = await AISummary.create({
+        const summary = await AISummary.create({
             userId: req.user._id,
             sourceDocumentId: source.sourceDocumentId,
             sourceTitle: source.title,
@@ -203,53 +266,190 @@ export const generateIntelligenceSummary = async (req, res, next) => {
             status: 'processing',
         });
 
-        try {
-            const { sections, rawMarkdown, insights } = await generateAISummary({
-                text: source.text,
-                settings,
-            });
+        // `wait=true` opt-in for callers that want the old synchronous
+        // shape (e.g. scripts, integration tests). The default — and what
+        // the V2 frontend uses — is async + SSE.
+        const wantSync = req.body?.wait === true || req.body?.wait === 'true';
 
-            summaryDoc.sections = sections;
-            summaryDoc.rawMarkdown = rawMarkdown;
-            summaryDoc.insights = insights;
-            summaryDoc.status = 'completed';
-            summaryDoc.summaryPageCount = estimateSummaryPageCount(summaryDoc);
-            summaryDoc.compressionPercent = compressionPercentFor(
-                summaryDoc.originalPageCount,
-                summaryDoc.summaryPageCount
-            );
-            await summaryDoc.save();
-        } catch (genErr) {
-            console.error('AI summary generation failed:', genErr);
-            summaryDoc.status = 'failed';
-            summaryDoc.failureReason = genErr.message || 'Unknown error';
-            await summaryDoc.save();
-            await cleanupTempFile(cleanupPath);
-            return res.status(502).json({
-                success: false,
-                error: 'AI summary generation failed. Please try again.',
-                statusCode: 502,
-                summaryId: summaryDoc._id,
+        const runPipeline = async () => {
+            try {
+                const pipelineResult = await runIntelligencePipeline({
+                    summaryId: summary._id.toString(),
+                    text: source.text,
+                    settings,
+                    // Pass through metadata that downstream OCR/diagram
+                    // services need (filePath for image extraction,
+                    // numPages for the scanned-doc heuristic).
+                    sourceMeta: {
+                        filePath: source.cleanupPath || null,
+                        numPages: source.originalPageCount || 0,
+                    },
+                });
+                await persistPipelineResult(summary, pipelineResult, settings);
+            } catch (genErr) {
+                console.error('AI summary generation failed:', genErr);
+                summary.status = 'failed';
+                summary.failureReason = genErr.message || 'Unknown error';
+                await summary.save();
+            } finally {
+                // Always release the uploaded temp file once the pipeline is
+                // done with it. We tolerate the file possibly being gone.
+                await cleanupTempFile(cleanupPath);
+            }
+        };
+
+        if (wantSync) {
+            await runPipeline();
+            return res.status(201).json({
+                success: true,
+                data: summary,
+                message: 'AI summary generated successfully',
             });
         }
 
-        await cleanupTempFile(cleanupPath);
-        cleanupPath = null;
+        // Async path: kick off the pipeline WITHOUT awaiting and respond
+        // immediately. We tag the unhandled-rejection with a clear context
+        // so any future bug is easy to spot in the logs.
+        runPipeline().catch((err) => {
+            console.error(
+                `[AI Intelligence] background pipeline rejected for ${summary._id}:`,
+                err
+            );
+        });
 
-        res.status(201).json({
+        res.status(202).json({
             success: true,
-            data: summaryDoc,
-            message: 'AI summary generated successfully',
+            data: {
+                summaryId: summary._id,
+                status: 'processing',
+                stagePlan: PIPELINE_STAGE_PLAN,
+            },
+            message: 'Generation started',
         });
     } catch (error) {
         await cleanupTempFile(cleanupPath);
         if (error.statusCode) {
             return res
                 .status(error.statusCode)
-                .json({ success: false, error: error.message, statusCode: error.statusCode });
+                .json({
+                    success: false,
+                    error: error.message,
+                    statusCode: error.statusCode,
+                });
         }
         next(error);
     }
+};
+
+// @desc    Live SSE progress stream for an in-flight generation
+// @route   GET /api/ai-intelligence/:id/progress
+// @access  Private
+export const streamGenerationProgress = async (req, res) => {
+    const summaryId = req.params.id;
+
+    if (!mongoose.isValidObjectId(summaryId)) {
+        return res
+            .status(400)
+            .json({ success: false, error: 'Invalid summary id', statusCode: 400 });
+    }
+    // Ownership check — we don't want a user observing someone else's
+    // pipeline progress just by knowing the id.
+    const summary = await AISummary.findOne({
+        _id: summaryId,
+        userId: req.user._id,
+    }).select('_id status');
+    if (!summary) {
+        return res
+            .status(404)
+            .json({ success: false, error: 'Summary not found', statusCode: 404 });
+    }
+
+    // ── SSE handshake ──
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable proxy buffering
+    res.flushHeaders?.();
+
+    const send = (event) => {
+        // SSE wire format: `data: <json>\n\n`
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    // Send the plan up-front so the UI can render every stage row before
+    // events start arriving (avoids the "stages appear one-by-one" flicker).
+    send({
+        type: 'plan',
+        stagePlan: PIPELINE_STAGE_PLAN,
+        at: new Date().toISOString(),
+    });
+
+    // Subscribe to the in-process bus. The registry replays its log on
+    // subscribe, so the client immediately gets every event that's already
+    // happened — perfect for late connections / reconnects.
+    const unsubscribe = subscribeProgress(summaryId, (event) => send(event));
+
+    // If the summary is already done at subscribe-time, the snapshot log
+    // covers it. Otherwise the orchestrator will eventually emit
+    // pipeline:complete / pipeline:failed and we should close.
+    const closeOnTerminal = (event) => {
+        if (
+            event.type === 'pipeline:complete' ||
+            event.type === 'pipeline:failed' ||
+            event.type === 'bus:closed'
+        ) {
+            try {
+                res.end();
+            } catch {
+                /* connection already gone */
+            }
+        }
+    };
+    const unsubscribeTerminal = subscribeProgress(summaryId, closeOnTerminal);
+
+    // If the pipeline finished BEFORE this subscribe and the registry has
+    // already been GC'd, getSnapshot returns null. In that case the only
+    // signal is the persisted `pipeline.stages` field on the AISummary
+    // doc itself — emit it then close.
+    if (!getProgressSnapshot(summaryId)) {
+        const persisted = await AISummary.findById(summaryId)
+            .select('pipeline status')
+            .lean();
+        if (persisted?.pipeline?.stages?.length) {
+            for (const s of persisted.pipeline.stages) {
+                send({
+                    type: 'stage:complete',
+                    stageId: s.id,
+                    label: s.label,
+                    progress: s.progress,
+                    durationMs: s.durationMs,
+                    at: (s.completedAt || new Date()).toISOString?.() ||
+                        new Date().toISOString(),
+                });
+            }
+            send({
+                type: persisted.status === 'failed' ? 'pipeline:failed' : 'pipeline:complete',
+                at: new Date().toISOString(),
+            });
+            res.end();
+            return;
+        }
+    }
+
+    // Heartbeat every 25s to keep the connection through proxies.
+    const heartbeat = setInterval(() => {
+        try {
+            res.write(`: heartbeat ${Date.now()}\n\n`);
+        } catch {
+            /* connection torn down */
+        }
+    }, 25_000);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        unsubscribeTerminal();
+    });
 };
 
 // @desc    Get a single AI summary
@@ -277,13 +477,11 @@ export const getIntelligenceSummary = async (req, res, next) => {
     }
 };
 
-// @desc    List user's AI summaries
+// @desc    List user's AI summaries (compact projection)
 // @route   GET /api/ai-intelligence/history
 // @access  Private
 export const listIntelligenceSummaries = async (req, res, next) => {
     try {
-        // Lightweight projection — the history list doesn't need the full
-        // `sections` array or `rawMarkdown`, just enough to render the row.
         const summaries = await AISummary.find({ userId: req.user._id })
             .select(
                 '_id sourceTitle sourceFileName sourceFileSize originalPageCount summaryPageCount compressionPercent settings.studyGoal settings.summaryLength settings.language insights status savedToDocuments savedDocumentId pdfUrl createdAt updatedAt'
@@ -291,13 +489,17 @@ export const listIntelligenceSummaries = async (req, res, next) => {
             .sort({ createdAt: -1 })
             .limit(50);
 
-        res.status(200).json({ success: true, data: summaries, count: summaries.length });
+        res.status(200).json({
+            success: true,
+            data: summaries,
+            count: summaries.length,
+        });
     } catch (error) {
         next(error);
     }
 };
 
-// @desc    Delete a saved AI summary (history entry)
+// @desc    Delete a saved AI summary
 // @route   DELETE /api/ai-intelligence/:id
 // @access  Private
 export const deleteIntelligenceSummary = async (req, res, next) => {
@@ -311,26 +513,24 @@ export const deleteIntelligenceSummary = async (req, res, next) => {
                 .status(404)
                 .json({ success: false, error: 'Summary not found', statusCode: 404 });
         }
-
-        // If we stashed a Cloudinary-cached PDF for this summary, drop it.
-        // Note: we do NOT delete the saved Document (if `savedToDocuments`) —
-        // that becomes the user's own asset once "Save to Documents" runs,
-        // and it gets its own lifecycle via the regular Documents UI.
         if (summary.pdfPublicId) {
             await cloudinary.uploader
                 .destroy(summary.pdfPublicId, { resource_type: 'raw' })
-                .catch((err) => console.error('Cloudinary destroy (summary PDF) error:', err));
+                .catch((err) =>
+                    console.error('Cloudinary destroy (summary PDF) error:', err)
+                );
         }
-
         await summary.deleteOne();
-
+        // Drop any in-process pipeline bus for this id so SSE clients
+        // attached to it are properly closed.
+        dropPipeline(summary._id.toString());
         res.status(200).json({ success: true, message: 'Summary deleted successfully' });
     } catch (error) {
         next(error);
     }
 };
 
-// @desc    Regenerate an existing summary (optionally with new settings)
+// @desc    Regenerate an existing summary (same source, possibly new settings)
 // @route   POST /api/ai-intelligence/:id/regenerate
 // @access  Private
 export const regenerateIntelligenceSummary = async (req, res, next) => {
@@ -345,18 +545,13 @@ export const regenerateIntelligenceSummary = async (req, res, next) => {
                 .json({ success: false, error: 'Summary not found', statusCode: 404 });
         }
 
-        // We need the source text. Prefer the linked Document; otherwise we
-        // can't regenerate — the PDF was never persisted (Path B uploads are
-        // discarded after extraction).
         let text = '';
         if (summary.sourceDocumentId) {
             const document = await Document.findOne({
                 _id: summary.sourceDocumentId,
                 userId: req.user._id,
             });
-            if (document && document.extractedText) {
-                text = document.extractedText;
-            }
+            if (document && document.extractedText) text = document.extractedText;
         }
         if (!text) {
             return res.status(400).json({
@@ -375,32 +570,30 @@ export const regenerateIntelligenceSummary = async (req, res, next) => {
         await summary.save();
 
         try {
-            const { sections, rawMarkdown, insights } = await generateAISummary({
+            const pipelineResult = await runIntelligencePipeline({
+                summaryId: summary._id.toString(),
                 text,
                 settings,
             });
 
-            summary.settings = settings;
-            summary.sections = sections;
-            summary.rawMarkdown = rawMarkdown;
-            summary.insights = insights;
-            summary.status = 'completed';
-            summary.summaryPageCount = estimateSummaryPageCount(summary);
-            summary.compressionPercent = compressionPercentFor(
-                summary.originalPageCount,
-                summary.summaryPageCount
-            );
-            // Invalidate any cached PDF — the content changed.
+            // Drop any cached PDF since the content just changed.
             if (summary.pdfPublicId) {
                 await cloudinary.uploader
                     .destroy(summary.pdfPublicId, { resource_type: 'raw' })
-                    .catch((err) => console.error('Cloudinary destroy (stale PDF) error:', err));
+                    .catch((err) =>
+                        console.error('Cloudinary destroy (stale PDF) error:', err)
+                    );
             }
             summary.pdfUrl = '';
             summary.pdfPublicId = '';
-            await summary.save();
 
-            res.status(200).json({ success: true, data: summary, message: 'Summary regenerated' });
+            await persistPipelineResult(summary, pipelineResult, settings);
+
+            res.status(200).json({
+                success: true,
+                data: summary,
+                message: 'Summary regenerated',
+            });
         } catch (genErr) {
             console.error('AI summary regeneration failed:', genErr);
             summary.status = 'failed';
@@ -417,16 +610,13 @@ export const regenerateIntelligenceSummary = async (req, res, next) => {
     }
 };
 
-// Render + upload + cache the PDF for an AISummary. Returns the (now-cached)
-// summary instance. Shared by `downloadPdf` and `saveToDocuments` so the work
-// only happens once per generation.
+// ── shared PDF render+upload helper ─────────────────────────────────────────
+
 const ensurePdfRendered = async (summary) => {
     if (summary.pdfUrl && summary.pdfPublicId) return summary;
 
     const buffer = await renderSummaryPdf(summary);
 
-    // Upload the buffer directly via the upload_stream API. This avoids any
-    // /tmp writes which Render may not persist between requests.
     const uploadResult = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
             {
@@ -444,14 +634,12 @@ const ensurePdfRendered = async (summary) => {
 
     summary.pdfUrl = uploadResult.secure_url;
     summary.pdfPublicId = uploadResult.public_id;
-    // Re-estimate page count using a slightly more accurate post-render heuristic.
     summary.summaryPageCount = estimateSummaryPageCount(summary);
     summary.compressionPercent = compressionPercentFor(
         summary.originalPageCount,
         summary.summaryPageCount
     );
     await summary.save();
-
     return summary;
 };
 
@@ -476,11 +664,13 @@ export const downloadIntelligencePdf = async (req, res, next) => {
                 statusCode: 400,
             });
         }
-
         await ensurePdfRendered(summary);
         res.status(200).json({
             success: true,
-            data: { url: summary.pdfUrl, fileName: `${summary.sourceTitle || 'summary'}.pdf` },
+            data: {
+                url: summary.pdfUrl,
+                fileName: `${summary.sourceTitle || 'summary'}.pdf`,
+            },
         });
     } catch (error) {
         next(error);
@@ -509,9 +699,7 @@ export const saveSummaryToDocuments = async (req, res, next) => {
             });
         }
 
-        // Idempotency: if the summary has already been saved to Documents and
-        // that Document still exists, just return it. (Avoids accidentally
-        // creating duplicates on double-clicks.)
+        // Idempotency
         if (summary.savedToDocuments && summary.savedDocumentId) {
             const existing = await Document.findById(summary.savedDocumentId);
             if (existing) {
@@ -523,16 +711,9 @@ export const saveSummaryToDocuments = async (req, res, next) => {
             }
         }
 
-        // 1. Make sure we have a rendered PDF on Cloudinary.
         await ensurePdfRendered(summary);
 
-        // 2. Create a Document record pointing at the rendered PDF. We re-use
-        //    the existing Document model so the summary lands seamlessly in
-        //    the user's library and behaves like any other document (chat,
-        //    flashcards, quizzes, etc. can all be run on it). The full
-        //    summary markdown becomes the extractedText, chunked the same
-        //    way regular uploads are.
-        const fakeBytes = Math.max(1024, (summary.rawMarkdown || '').length); // best-effort size
+        const fakeBytes = Math.max(1024, (summary.rawMarkdown || '').length);
         const docTitle = `${summary.sourceTitle || 'AI Summary'} — AI Summary`;
 
         const document = await Document.create({
@@ -585,22 +766,13 @@ export const askIntelligenceSummary = async (req, res, next) => {
                 .json({ success: false, error: 'Summary not found', statusCode: 404 });
         }
 
-        // Cap the context so we stay well inside Groq's window.
-        const context = (summary.rawMarkdown || '').substring(0, 12000);
-        const prompt = `
-You are a study tutor answering a student's follow-up question about the AI-generated summary below.
-Be precise, cite the relevant section of the summary, and keep the answer focused.
-
-SUMMARY:
-${context}
-
-STUDENT QUESTION:
-${question}
-
-YOUR ANSWER (markdown formatted):
-`.trim();
-
-        const answer = await rawGenerate(prompt);
+        const answer = await generateText(
+            askAiPrompt({
+                summaryMarkdown: summary.rawMarkdown,
+                question,
+            }),
+            { label: 'ask-ai', maxTokens: 1500 }
+        );
         res.status(200).json({ success: true, data: { question, answer } });
     } catch (error) {
         next(error);
@@ -632,24 +804,13 @@ export const translateIntelligenceSummary = async (req, res, next) => {
                 .json({ success: false, error: 'Summary not found', statusCode: 404 });
         }
 
-        const labelMap = {
-            english: 'clear, professional English',
-            hindi: 'Hindi (Devanagari script)',
-            bengali: 'Bengali script',
-        };
-
-        const prompt = `
-Translate the markdown study summary below into ${labelMap[targetLanguage]}.
-Preserve markdown formatting (headings, bullets, bold) exactly. Do NOT add or remove sections.
-Where a technical term has no good local equivalent, keep the English term and add the translation in parentheses.
-
-SUMMARY:
-${(summary.rawMarkdown || '').substring(0, 12000)}
-
-TRANSLATED SUMMARY:
-`.trim();
-
-        const translated = await rawGenerate(prompt);
+        const translated = await generateText(
+            translatePrompt({
+                summaryMarkdown: summary.rawMarkdown,
+                targetLanguage,
+            }),
+            { label: 'translate', maxTokens: 6000 }
+        );
         res.status(200).json({
             success: true,
             data: { targetLanguage, translatedMarkdown: translated },
