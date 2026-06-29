@@ -12,6 +12,8 @@ import {
     verifyPasswordOTP,
     forgotPassword,  
     resetPassword, 
+    sendRegisterOTP,   
+    verifyRegisterOTP
 } from '../controllers/authController.js';
 import protect from '../middleware/auth.js';
 
@@ -30,6 +32,8 @@ const loginValidation = [
 
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
+router.post('/send-register-otp', registerValidation, sendRegisterOTP);
+router.post('/verify-register-otp', verifyRegisterOTP);
 
 router.get('/profile', protect, getProfile);
 router.put('/profile', protect, updateProfile);

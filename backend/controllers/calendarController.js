@@ -5,9 +5,7 @@ import ExamSchedule from '../models/ExamSchedule.js';
 import Document from '../models/Document.js';
 import Quiz from '../models/Quiz.js';
 import VivaSession from '../models/VivaSession.js';
-// import VivaSession from '../models/VivaSession.js';
 import * as geminiService from '../utils/geminiService.js';
-// import axios from 'axios';
 import User from "../models/User.js";
 import { sendReminderEmail } from "../utils/sendEmail.js";
 
@@ -42,21 +40,12 @@ export const createSession = async (req, res, next) => {
             duration: duration || 60, priority, color, notes
         });
 
-        const user = await User.findById(req.user._id);
+        // ✅ NO email here — cron job in server.js handles reminder 30 min before
 
-if (user?.email) {
-    await sendReminderEmail(
-        user.email,
-        session.title,
-        session.date,
-        session.startTime
-    );
-}
-
-res.status(201).json({
-    success: true,
-    data: session
-});
+        res.status(201).json({
+            success: true,
+            data: session
+        });
     } catch (error) { next(error); }
 };
 
@@ -88,7 +77,6 @@ export const markSessionComplete = async (req, res, next) => {
         );
         if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
 
-        // Update exam hours studied
         if (session.subject) {
             await ExamSchedule.findOneAndUpdate(
                 { userId: req.user._id, subject: session.subject },
@@ -111,7 +99,19 @@ export const rescheduleSession = async (req, res, next) => {
         session.startTime = newStartTime;
         session.endTime = newEndTime;
         session.status = 'rescheduled';
+        session.reminderSent = false; // ✅ reset so cron sends reminder for new time
         await session.save();
+
+        // ✅ Send confirmation email that session was rescheduled
+        const user = await User.findById(req.user._id);
+        if (user?.email) {
+            await sendReminderEmail(
+                user.email,
+                `[Rescheduled] ${session.title}`,
+                session.date,
+                session.startTime
+            );
+        }
 
         res.status(200).json({ success: true, data: session });
     } catch (error) { next(error); }
@@ -213,7 +213,6 @@ export const generateAISchedule = async (req, res, next) => {
     try {
         const { availableHoursPerDay = 4, studyDaysPerWeek = 5, preferredStartTime = '09:00' } = req.body;
 
-        // Get user's exams and existing performance data
         const exams = await ExamSchedule.find({ userId: req.user._id, examDate: { $gte: new Date() } }).sort({ examDate: 1 });
         const vivaSessions = await VivaSession.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(10);
         const quizzes = await Quiz.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(10);
@@ -222,7 +221,6 @@ export const generateAISchedule = async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'Please add at least one exam first' });
         }
 
-        // Try Python ML API first, fallback to Gemini
         let schedule = [];
         try {
             const mlResponse = await axios.post(`${ML_API_URL}/predict-schedule`, {
@@ -240,12 +238,13 @@ export const generateAISchedule = async (req, res, next) => {
             }, { timeout: 5000 });
             schedule = mlResponse.data.schedule;
         } catch (mlError) {
-            // Fallback to Gemini
             console.log('ML API not available, using Gemini fallback');
             schedule = await generateScheduleWithGemini(exams, availableHoursPerDay, studyDaysPerWeek, preferredStartTime);
         }
 
-        // Save generated sessions to DB
+        // ✅ Fetch user ONCE before loop
+        const user = await User.findById(req.user._id);
+
         const savedSessions = [];
         for (const item of schedule) {
             const session = await StudySession.create({
@@ -261,6 +260,7 @@ export const generateAISchedule = async (req, res, next) => {
                 aiGenerated: true,
             });
             savedSessions.push(session);
+            // ✅ No immediate email — cron handles reminders 30 min before each session
         }
 
         res.status(200).json({ success: true, data: savedSessions, message: `${savedSessions.length} study sessions generated` });
@@ -325,26 +325,21 @@ export const getAnalytics = async (req, res, next) => {
         const completionRate = totalSessions > 0 ? Math.round((completed / totalSessions) * 100) : 0;
         const totalStudyHours = sessions.filter(s => s.status === 'completed').reduce((acc, s) => acc + (s.duration / 60), 0);
 
-        // Subject breakdown
         const subjectMap = {};
         sessions.filter(s => s.status === 'completed').forEach(s => {
             subjectMap[s.subject] = (subjectMap[s.subject] || 0) + s.duration / 60;
         });
 
-        // Quiz performance
         const avgQuizScore = quizzes.length > 0
             ? Math.round(quizzes.reduce((acc, q) => acc + (q.score || 0), 0) / quizzes.length)
             : 0;
 
-        // Viva performance
         const avgVivaScore = vivaSessions.length > 0
             ? Math.round(vivaSessions.reduce((acc, v) => acc + (v.score || 0), 0) / vivaSessions.length)
             : 0;
 
-        // Weak topics from viva
         const weakTopics = [...new Set(vivaSessions.flatMap(v => v.weakTopics || []))].slice(0, 5);
 
-        // Try ML performance prediction
         let performancePrediction = null;
         try {
             const mlRes = await axios.post(`${ML_API_URL}/predict-performance`, {
@@ -385,13 +380,11 @@ export const autoRescheduleMissed = async (req, res, next) => {
             date: { $lt: now }
         });
 
-        // Mark as missed
         for (const s of missed) {
             s.status = 'missed';
             await s.save();
         }
 
-        // Reschedule each missed session to next available day
         const rescheduled = [];
         for (const session of missed) {
             const newDate = new Date();
@@ -413,6 +406,17 @@ export const autoRescheduleMissed = async (req, res, next) => {
                 aiGenerated: true,
             });
             rescheduled.push(newSession);
+
+            // ✅ Send confirmation email that session was rescheduled
+            const user = await User.findById(session.userId);
+            if (user?.email) {
+                await sendReminderEmail(
+                    user.email,
+                    `[Rescheduled] ${newSession.title}`,
+                    newSession.date,
+                    newSession.startTime
+                );
+            }
         }
 
         res.status(200).json({
