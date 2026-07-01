@@ -15,11 +15,25 @@ const DEFAULT_MODEL =
     process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-70b-instruct';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Tiered model routing — defaults to the same free-tier model for every
+// tier unless OPENROUTER_MODEL_FAST / OPENROUTER_MODEL_BEST are set, since
+// OpenRouter is the last-resort fallback and most deploys only provision
+// one model here.
+const MODELS = {
+    fast: process.env.OPENROUTER_MODEL_FAST || DEFAULT_MODEL,
+    medium: DEFAULT_MODEL,
+    best: process.env.OPENROUTER_MODEL_BEST || DEFAULT_MODEL,
+};
+const DEFAULT_TIER = 'medium';
+
 export class OpenRouterProvider extends BaseProvider {
     constructor() {
         super();
         this.key = process.env.OPENROUTER_API_KEY || '';
-        this.model = DEFAULT_MODEL;
+    }
+
+    _modelFor(options = {}) {
+        return MODELS[options.tier] || MODELS[DEFAULT_TIER];
     }
 
     get id() {
@@ -40,7 +54,7 @@ export class OpenRouterProvider extends BaseProvider {
         }
 
         const body = {
-            model: this.model,
+            model: this._modelFor(options),
             messages: [{ role: 'user', content: prompt }],
             temperature: options.temperature ?? 0.5,
             max_tokens: options.maxTokens ?? 4096,

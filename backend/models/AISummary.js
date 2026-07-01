@@ -82,6 +82,12 @@ const insightsSchema = new mongoose.Schema(
         },
         targetWords: { type: Number, default: 0 },
         actualWords: { type: Number, default: 0 },
+        sourceWordCount: { type: Number, default: 0 },
+        cleanedWordCount: { type: Number, default: 0 },
+        candidateChunkCount: { type: Number, default: 0 },
+        selectedChunkCount: { type: Number, default: 0 },
+        selectedWordCount: { type: Number, default: 0 },
+        tokenReductionPercent: { type: Number, default: 0 },
     },
     { _id: false }
 );

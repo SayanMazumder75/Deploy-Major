@@ -76,6 +76,9 @@ export const extractChunk = async ({ chunk, settings, totalChunks, chain }) => {
             // educational PDFs.
             maxTokens: 4096,
             temperature: 0.4,
+            // Routing: chunk extraction runs 20-30x per generation — use the
+            // fast/cheap tier so it doesn't dominate token budget.
+            tier: 'fast',
         });
     } catch (err) {
         // A single chunk failing should never kill the whole pipeline. We
@@ -259,7 +262,9 @@ export const rewriteMergedDocument = async ({ merged, settings, targetWords, cha
                 settings,
                 targetWords,
             }),
-            { label: 'rewrite-merged', maxTokens: 8192, temperature: 0.4 }
+            // Routing: the rewrite pass produces the final polished summary
+            // shown to the user — worth the best-tier model.
+            { label: 'rewrite-merged', maxTokens: 8192, temperature: 0.4, tier: 'best' }
         );
         const parsed = safeParseJson(raw);
         if (parsed && Array.isArray(parsed.chapters) && parsed.chapters.length) {

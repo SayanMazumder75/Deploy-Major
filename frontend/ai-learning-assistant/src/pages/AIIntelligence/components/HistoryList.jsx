@@ -1,51 +1,37 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    History as HistoryIcon,
-    FileText,
-    Trash2,
-    CheckCircle2,
-    Loader2,
     AlertCircle,
     ArrowRight,
+    CheckCircle2,
+    FileText,
+    History as HistoryIcon,
+    Loader2,
+    RefreshCw,
+    Trash2,
 } from 'lucide-react';
 import moment from 'moment';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HistoryList
-//
-// "Recent AI Generations" rail at the bottom of the AI Document Intelligence
-// page. Each row deep-links to the Summary Viewer so users can reopen a
-// previous result without paying for a regeneration.
-//
-// Status pill colour map:
-//   completed  → green pill, "Completed"
-//   processing → spinning yellow pill, "Processing..." (the spec literally
-//                shows "Machine Learning · Processing..." as an example row)
-//   failed     → red pill, "Failed"
-// ─────────────────────────────────────────────────────────────────────────────
 
 const StatusPill = ({ status }) => {
     if (status === 'processing') {
         return (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2.5} />
-                Processing...
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/40 bg-amber-300/15 px-2.5 py-1 text-[11px] font-bold text-amber-100">
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+                Processing
             </span>
         );
     }
     if (status === 'failed') {
         return (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">
-                <AlertCircle className="w-3 h-3" strokeWidth={2.5} />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200/40 bg-red-400/15 px-2.5 py-1 text-[11px] font-bold text-red-100">
+                <AlertCircle className="h-3 w-3" strokeWidth={2.5} />
                 Failed
             </span>
         );
     }
     return (
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3 h-3" strokeWidth={2.5} />
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/40 bg-emerald-300/15 px-2.5 py-1 text-[11px] font-bold text-emerald-100">
+            <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
             Completed
         </span>
     );
@@ -55,7 +41,7 @@ const HistoryRow = ({ item, onDelete }) => {
     const navigate = useNavigate();
 
     const open = () => {
-        if (item.status !== 'completed') return; // can't open a still-processing or failed entry
+        if (item.status !== 'completed') return;
         navigate(`/ai-intelligence/${item._id}`);
     };
 
@@ -64,35 +50,32 @@ const HistoryRow = ({ item, onDelete }) => {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
-            className="group flex items-center gap-3 px-4 py-3 rounded-xl bg-white/70 border border-purple-100 hover:border-purple-300 hover:bg-purple-50/50 transition-all"
+            className="group grid gap-3 rounded-2xl border border-white/10 bg-white/8 p-3 transition-all hover:border-white/25 hover:bg-white/12 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center"
         >
-            <div className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow shadow-purple-500/25">
-                <FileText className="w-4 h-4 text-white" strokeWidth={2.2} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-400 to-violet-500 shadow-lg shadow-fuchsia-950/25">
+                <FileText className="h-5 w-5 text-white" strokeWidth={2.2} />
             </div>
 
             <button
                 type="button"
                 onClick={open}
-                className="flex-1 min-w-0 text-left"
+                className="min-w-0 text-left"
                 disabled={item.status !== 'completed'}
             >
-                <div className="flex items-center gap-2">
-                    <p
-                        className="text-sm font-semibold text-violet-700 truncate"
-                        title={item.sourceTitle}
-                    >
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-bold text-white" title={item.sourceTitle}>
                         {item.sourceTitle}
                     </p>
                     {item.savedToDocuments && (
-                        <span className="shrink-0 text-[10px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded-md bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border border-purple-200">
+                        <span className="rounded-full border border-fuchsia-200/40 bg-fuchsia-300/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-fuchsia-100">
                             Saved
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-3 mt-0.5 text-[11px] text-purple-500/80">
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs font-medium text-purple-100/60">
                     {item.originalPageCount > 0 && (
                         <span className="tabular-nums">
-                            {item.originalPageCount} → {item.summaryPageCount || 1} Pages
+                            {item.originalPageCount} to {item.summaryPageCount || 1} pages
                         </span>
                     )}
                     <span>{moment(item.createdAt).fromNow()}</span>
@@ -105,10 +88,10 @@ const HistoryRow = ({ item, onDelete }) => {
                 <button
                     type="button"
                     onClick={open}
-                    className="hidden sm:inline-flex items-center justify-center w-8 h-8 rounded-lg text-purple-500 hover:text-violet-700 hover:bg-purple-100 transition-colors"
+                    className="hidden h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8 text-purple-100 transition hover:bg-white hover:text-violet-700 sm:inline-flex"
                     title="Open summary"
                 >
-                    <ArrowRight className="w-4 h-4" strokeWidth={2.2} />
+                    <ArrowRight className="h-4 w-4" strokeWidth={2.2} />
                 </button>
             )}
 
@@ -118,10 +101,10 @@ const HistoryRow = ({ item, onDelete }) => {
                     e.stopPropagation();
                     onDelete(item);
                 }}
-                className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8 text-purple-100/70 opacity-100 transition hover:border-red-200/60 hover:bg-red-400/15 hover:text-red-100 sm:opacity-0 sm:group-hover:opacity-100"
                 title="Delete from history"
             >
-                <Trash2 className="w-4 h-4" strokeWidth={2.2} />
+                <Trash2 className="h-4 w-4" strokeWidth={2.2} />
             </button>
         </motion.li>
     );
@@ -129,30 +112,27 @@ const HistoryRow = ({ item, onDelete }) => {
 
 const HistoryList = ({ items = [], loading = false, onDelete, onRefresh }) => {
     return (
-        <div className="bg-white/80 backdrop-blur-xl border border-purple-200/60 rounded-2xl shadow-xl shadow-purple-200/30 overflow-hidden">
-            <div className="px-6 py-4 border-b border-purple-200/50 bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 flex items-center justify-between gap-3">
+        <section className="overflow-hidden rounded-2xl border border-white/20 bg-white/12 shadow-2xl shadow-purple-950/25 backdrop-blur-2xl">
+            <div className="flex flex-col gap-3 border-b border-white/10 bg-white/8 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow shadow-purple-500/25">
-                        <HistoryIcon
-                            className="w-4 h-4 text-white"
-                            strokeWidth={2.2}
-                        />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+                        <HistoryIcon className="h-5 w-5 text-fuchsia-100" strokeWidth={2.2} />
                     </div>
                     <div>
-                        <h3 className="text-sm font-semibold text-violet-700">
-                            Recent AI Generations
-                        </h3>
-                        <p className="text-[11px] text-purple-500/80">
-                            Reopen previous summaries without regenerating
+                        <p className="text-xs font-bold uppercase tracking-wide text-fuchsia-100">
+                            Previous AI History
                         </p>
+                        <h2 className="mt-1 text-lg font-bold text-white">Recent generations</h2>
                     </div>
                 </div>
+
                 {onRefresh && (
                     <button
                         type="button"
                         onClick={onRefresh}
-                        className="text-[11px] font-semibold text-purple-500 hover:text-violet-700 transition-colors"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-purple-100 transition hover:bg-white hover:text-violet-700"
                     >
+                        <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.4} />
                         Refresh
                     </button>
                 )}
@@ -160,23 +140,23 @@ const HistoryList = ({ items = [], loading = false, onDelete, onRefresh }) => {
 
             <div className="p-4">
                 {loading ? (
-                    <div className="py-8 flex items-center justify-center text-purple-500/80 text-sm">
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        Loading history…
+                    <div className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/8 py-8 text-sm font-semibold text-purple-100/75">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading history...
                     </div>
                 ) : items.length === 0 ? (
-                    <div className="py-10 text-center text-sm text-purple-500/80">
-                        No AI generations yet — generate your first summary above.
+                    <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-10 text-center text-sm font-medium text-purple-100/70">
+                        No AI generations yet. Your previous summaries will appear here.
                     </div>
                 ) : (
-                    <ul className="space-y-2">
+                    <ul className="space-y-2.5">
                         {items.map((item) => (
                             <HistoryRow key={item._id} item={item} onDelete={onDelete} />
                         ))}
                     </ul>
                 )}
             </div>
-        </div>
+        </section>
     );
 };
 

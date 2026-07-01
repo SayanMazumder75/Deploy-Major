@@ -10,14 +10,26 @@
 
 import { BaseProvider, ProviderError } from './BaseProvider.js';
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+// Tiered model routing. Flash covers fast + medium; if GEMINI_MODEL_BEST is
+// provisioned we route "best" tier calls (final summary, mind map) to it,
+// otherwise we fall back to Flash so nothing breaks for deploys that only
+// set GEMINI_API_KEY.
+const MODELS = {
+    fast: process.env.GEMINI_MODEL_FAST || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    medium: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    best: process.env.GEMINI_MODEL_BEST || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+};
+const DEFAULT_TIER = 'medium';
 
 export class GeminiProvider extends BaseProvider {
     constructor() {
         super();
         this.key = process.env.GEMINI_API_KEY || '';
-        this.model = DEFAULT_MODEL;
         this.client = null;
+    }
+
+    _modelFor(options = {}) {
+        return MODELS[options.tier] || MODELS[DEFAULT_TIER];
     }
 
     get id() {
@@ -61,7 +73,7 @@ export class GeminiProvider extends BaseProvider {
 
         try {
             const result = await client.models.generateContent({
-                model: this.model,
+                model: this._modelFor(options),
                 contents: prompt,
                 config,
             });

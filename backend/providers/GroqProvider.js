@@ -8,7 +8,16 @@
 import Groq from 'groq-sdk';
 import { BaseProvider, ProviderError } from './BaseProvider.js';
 
-const MODEL = 'llama-3.3-70b-versatile';
+// Tiered model routing (see providers/BaseProvider.js for the tier
+// contract). Groq's 8b model is fast + cheap on tokens for high-volume,
+// low-stakes calls (per-chunk extraction); the 70b model is reserved for
+// calls where quality actually matters (merges, flashcards/quiz, rewrite).
+const MODELS = {
+    fast: process.env.GROQ_MODEL_FAST || 'llama-3.1-8b-instant',
+    medium: process.env.GROQ_MODEL_MEDIUM || 'llama-3.3-70b-versatile',
+    best: process.env.GROQ_MODEL_BEST || 'llama-3.3-70b-versatile',
+};
+const DEFAULT_TIER = 'medium';
 
 export class GroqProvider extends BaseProvider {
     constructor() {
@@ -18,6 +27,10 @@ export class GroqProvider extends BaseProvider {
         // `client` is created lazily on first call so a bad/missing key only
         // surfaces at the point of use, not at module import time.
         this.client = null;
+    }
+
+    _modelFor(options = {}) {
+        return MODELS[options.tier] || MODELS[DEFAULT_TIER];
     }
 
     get id() {
@@ -46,7 +59,7 @@ export class GroqProvider extends BaseProvider {
         const client = this._ensureClient();
         try {
             const completion = await client.chat.completions.create({
-                model: MODEL,
+                model: this._modelFor(options),
                 messages: [{ role: 'user', content: prompt }],
                 temperature: options.temperature ?? 0.5,
                 max_tokens: options.maxTokens ?? 4096,
@@ -77,7 +90,7 @@ export class GroqProvider extends BaseProvider {
         const client = this._ensureClient();
         try {
             const completion = await client.chat.completions.create({
-                model: MODEL,
+                model: this._modelFor(options),
                 messages: [{ role: 'user', content: prompt }],
                 temperature: options.temperature ?? 0.4,
                 max_tokens: options.maxTokens ?? 4096,

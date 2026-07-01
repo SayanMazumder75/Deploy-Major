@@ -25,11 +25,26 @@ const ENDPOINT =
     process.env.NVIDIA_API_BASE_URL ||
     'https://integrate.api.nvidia.com/v1/chat/completions';
 
+// Tiered model routing. NVIDIA_MODEL_FAST lets a deploy point cheap/high-
+// volume calls (per-chunk extraction) at a smaller NIM model while keeping
+// the Nemotron Ultra reasoning model for "best" tier calls. Both default to
+// the same model if a fast variant isn't configured, so this is a no-op
+// until someone opts in.
+const MODELS = {
+    fast: process.env.NVIDIA_MODEL_FAST || process.env.NVIDIA_MODEL || DEFAULT_MODEL,
+    medium: process.env.NVIDIA_MODEL || DEFAULT_MODEL,
+    best: process.env.NVIDIA_MODEL || DEFAULT_MODEL,
+};
+const DEFAULT_TIER = 'medium';
+
 export class NvidiaProvider extends BaseProvider {
     constructor() {
         super();
         this.key = process.env.NVIDIA_API_KEY || '';
-        this.model = process.env.NVIDIA_MODEL || DEFAULT_MODEL;
+    }
+
+    _modelFor(options = {}) {
+        return MODELS[options.tier] || MODELS[DEFAULT_TIER];
     }
 
     get id() {
@@ -50,7 +65,7 @@ export class NvidiaProvider extends BaseProvider {
         }
 
         const body = {
-            model: this.model,
+            model: this._modelFor(options),
             messages: [{ role: 'user', content: prompt }],
             temperature: options.temperature ?? 0.5,
             max_tokens: options.maxTokens ?? 4096,

@@ -1,24 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Upload, Search, Check, X } from 'lucide-react';
+import { Check, FileText, Search, Upload, X } from 'lucide-react';
 import documentService from '../../../services/documentService';
 import Spinner from '../../../components/common/Spinner';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SourcePicker
-//
-// Two-mode source selector for the AI Document Intelligence page:
-//   1. Pick from existing Documents library (default — uses the same backend
-//      endpoint the Documents page hits, so anything the user has previously
-//      uploaded is immediately available here).
-//   2. Upload a fresh PDF in-line for one-off summarization without polluting
-//      the Documents library.
-//
-// Emits a `source` object compatible with aiIntelligenceService.generate:
-//   - { documentId }  (library mode)
-//   - { file, title } (upload mode)
-// plus a label/file-size for display purposes.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const formatBytes = (bytes) => {
     if (!bytes || bytes < 1) return '';
@@ -81,41 +65,49 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
     const clearFile = () => onChange(null);
 
     return (
-        <div
-            className={`relative w-full bg-white/80 backdrop-blur-xl border border-purple-200/60 rounded-2xl shadow-xl shadow-purple-200/30 overflow-hidden ${
+        <section
+            className={`overflow-hidden rounded-2xl border border-white/20 bg-white/12 shadow-2xl shadow-purple-950/25 backdrop-blur-2xl ${
                 disabled ? 'pointer-events-none opacity-60' : ''
             }`}
         >
-            <div className="px-6 py-4 border-b border-purple-200/50 bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50">
-                <h2 className="text-base font-semibold text-violet-700">Source</h2>
-                <p className="text-xs text-purple-500/80">Pick a document or upload a new PDF</p>
+            <div className="border-b border-white/10 bg-white/8 px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-fuchsia-100">
+                            Upload Area
+                        </p>
+                        <h2 className="mt-1 text-lg font-bold text-white">Choose your source</h2>
+                    </div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+                        <Upload className="h-5 w-5 text-fuchsia-100" strokeWidth={2.2} />
+                    </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/10 p-1">
+                    {[
+                        { id: 'library', label: 'Documents' },
+                        { id: 'upload', label: 'Upload PDF' },
+                    ].map((tab) => {
+                        const active = mode === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setMode(tab.id)}
+                                className={`h-9 rounded-lg text-xs font-bold transition-all ${
+                                    active
+                                        ? 'bg-white text-violet-800 shadow-lg shadow-purple-950/20'
+                                        : 'text-purple-100/75 hover:bg-white/10 hover:text-white'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* mode toggle */}
-            <div className="px-6 pt-4 flex gap-1.5">
-                {[
-                    { id: 'library', label: 'From Documents' },
-                    { id: 'upload', label: 'Upload PDF' },
-                ].map((tab) => {
-                    const active = mode === tab.id;
-                    return (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setMode(tab.id)}
-                            className={`relative px-3.5 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                                active
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow shadow-purple-500/25'
-                                    : 'bg-purple-50/40 text-violet-700 hover:bg-purple-100'
-                            }`}
-                        >
-                            {tab.label}
-                        </button>
-                    );
-                })}
-            </div>
-
-            <div className="p-6">
+            <div className="p-5">
                 <AnimatePresence mode="wait">
                     {mode === 'library' && (
                         <motion.div
@@ -125,29 +117,29 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
                             exit={{ opacity: 0, y: -6 }}
                             transition={{ duration: 0.18 }}
                         >
-                            {/* search */}
                             <div className="relative mb-3">
                                 <Search
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400"
+                                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-100/70"
                                     strokeWidth={2}
                                 />
                                 <input
                                     type="text"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search your documents..."
-                                    className="w-full h-10 pl-9 pr-3 rounded-xl border-2 border-purple-200 bg-purple-50/40 text-sm text-slate-900 placeholder-purple-400 focus:outline-none focus:border-purple-500 focus:bg-white"
+                                    placeholder="Search documents"
+                                    className="h-11 w-full rounded-xl border border-white/15 bg-white/10 pl-9 pr-3 text-sm text-white placeholder:text-purple-100/45 outline-none transition focus:border-fuchsia-200/70 focus:bg-white/15"
                                 />
                             </div>
 
-                            {/* list */}
-                            <div className="max-h-72 overflow-y-auto pr-1 -mr-1">
+                            <div className="max-h-80 overflow-y-auto pr-1">
                                 {loadingDocs ? (
-                                    <Spinner />
+                                    <div className="flex justify-center py-8">
+                                        <Spinner />
+                                    </div>
                                 ) : filteredDocs.length === 0 ? (
-                                    <div className="text-center py-10 text-sm text-purple-500/80">
+                                    <div className="rounded-xl border border-white/10 bg-white/8 px-4 py-8 text-center text-sm text-purple-100/70">
                                         {docs.length === 0
-                                            ? 'No documents yet. Upload one from the Documents page, or switch to "Upload PDF".'
+                                            ? 'No documents found. Switch to Upload PDF to add a one-off source.'
                                             : 'No documents match your search.'}
                                     </div>
                                 ) : (
@@ -165,46 +157,37 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
                                                     <button
                                                         type="button"
                                                         onClick={() => handlePickDocument(doc)}
-                                                        className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border-2 transition-all duration-200 text-left ${
+                                                        className={`group flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all ${
                                                             active
-                                                                ? 'bg-gradient-to-r from-purple-50 to-pink-50 border-purple-400 shadow shadow-purple-200/40'
-                                                                : 'bg-white/70 border-purple-100 hover:border-purple-300 hover:bg-purple-50/50'
+                                                                ? 'border-fuchsia-200/70 bg-white text-violet-900 shadow-xl shadow-purple-950/20'
+                                                                : 'border-white/10 bg-white/8 text-white hover:border-white/25 hover:bg-white/14'
                                                         }`}
                                                     >
                                                         <div
-                                                            className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${
+                                                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                                                                 active
-                                                                    ? 'bg-gradient-to-br from-purple-500 to-pink-500 shadow shadow-purple-500/30'
-                                                                    : 'bg-gradient-to-br from-purple-100 to-pink-100'
+                                                                    ? 'bg-gradient-to-br from-fuchsia-500 to-violet-500 text-white'
+                                                                    : 'border border-white/10 bg-white/10 text-fuchsia-100'
                                                             }`}
                                                         >
-                                                            <FileText
-                                                                className={`w-4 h-4 ${
-                                                                    active
-                                                                        ? 'text-white'
-                                                                        : 'text-purple-600'
-                                                                }`}
-                                                                strokeWidth={2.2}
-                                                            />
+                                                            <FileText className="h-4.5 w-4.5" strokeWidth={2.2} />
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p
-                                                                className="text-sm font-semibold text-violet-700 truncate"
-                                                                title={doc.title}
-                                                            >
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-bold" title={doc.title}>
                                                                 {doc.title}
                                                             </p>
-                                                            <p className="text-[11px] text-purple-500/80">
-                                                                {formatBytes(doc.fileSize)}
+                                                            <p
+                                                                className={`mt-0.5 text-[11px] ${
+                                                                    active ? 'text-violet-600' : 'text-purple-100/55'
+                                                                }`}
+                                                            >
+                                                                {formatBytes(doc.fileSize) || 'PDF document'}
                                                             </p>
                                                         </div>
                                                         {active && (
-                                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow shadow-purple-500/40">
-                                                                <Check
-                                                                    className="w-3 h-3 text-white"
-                                                                    strokeWidth={3}
-                                                                />
-                                                            </div>
+                                                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-500">
+                                                                <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+                                                            </span>
                                                         )}
                                                     </button>
                                                 </motion.li>
@@ -225,54 +208,45 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
                             transition={{ duration: 0.18 }}
                         >
                             {value?.kind === 'file' ? (
-                                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300">
-                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow shadow-purple-500/30">
-                                        <FileText
-                                            className="w-5 h-5 text-white"
-                                            strokeWidth={2.2}
-                                        />
+                                <div className="flex items-center gap-3 rounded-2xl border border-fuchsia-200/50 bg-white text-violet-900 p-4 shadow-xl shadow-purple-950/20">
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-violet-500 text-white">
+                                        <FileText className="h-5 w-5" strokeWidth={2.2} />
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p
-                                            className="text-sm font-semibold text-violet-700 truncate"
-                                            title={value.label}
-                                        >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-bold" title={value.label}>
                                             {value.label}
                                         </p>
-                                        <p className="text-[11px] text-purple-500/80">
-                                            {formatBytes(value.fileSize)} · Ready to summarize
+                                        <p className="mt-0.5 text-xs font-medium text-violet-500">
+                                            {formatBytes(value.fileSize)} / Ready to summarize
                                         </p>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={clearFile}
-                                        className="w-8 h-8 flex items-center justify-center rounded-lg text-purple-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg text-violet-500 transition hover:bg-red-50 hover:text-red-500"
+                                        title="Remove selected PDF"
                                     >
-                                        <X className="w-4 h-4" strokeWidth={2.2} />
+                                        <X className="h-4 w-4" strokeWidth={2.2} />
                                     </button>
                                 </div>
                             ) : (
                                 <label
                                     htmlFor="ai-intel-pdf-upload"
-                                    className="relative flex flex-col items-center justify-center py-10 px-6 rounded-xl border-2 border-dashed border-purple-300 bg-purple-50/40 hover:bg-purple-50 hover:border-purple-400 cursor-pointer transition-all"
+                                    className="relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-fuchsia-200/60 bg-white/8 px-5 py-10 text-center transition hover:border-white/70 hover:bg-white/12"
                                 >
                                     <input
                                         id="ai-intel-pdf-upload"
                                         type="file"
                                         accept=".pdf"
                                         onChange={handleFileChange}
-                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                                     />
-                                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30 mb-3">
-                                        <Upload className="w-7 h-7 text-white" strokeWidth={2} />
+                                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-400 to-violet-500 shadow-xl shadow-fuchsia-950/30">
+                                        <Upload className="h-7 w-7 text-white" strokeWidth={2} />
                                     </div>
-                                    <p className="text-sm font-semibold text-violet-700 mb-1">
-                                        <span className="text-fuchsia-600">Click to upload</span>{' '}
-                                        or drag and drop
-                                    </p>
-                                    <p className="text-[11px] text-purple-500/80">
-                                        PDF up to 100MB · Will not appear in Documents until you
-                                        save it
+                                    <p className="text-sm font-bold text-white">Click to upload or drag a PDF</p>
+                                    <p className="mt-1 text-xs text-purple-100/60">
+                                        PDF up to 100MB / Saved to Documents only when you choose to save it
                                     </p>
                                 </label>
                             )}
@@ -280,7 +254,7 @@ const SourcePicker = ({ value, onChange, disabled = false }) => {
                     )}
                 </AnimatePresence>
             </div>
-        </div>
+        </section>
     );
 };
 

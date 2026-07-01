@@ -1,3 +1,16 @@
+import { stripBoilerplate } from '../services/chunkService.js';
+
+// V4: document-upload chunking had no cap at all — a ~90k-word PDF at the
+// default 500-word chunk size produced ~180+ stored chunks, most of them
+// boilerplate (acknowledgements/copyright/index/references/appendix) or
+// duplicate running headers/footers pulled straight from PDF extraction.
+// These stored chunks aren't fed to the AI in bulk (chat/explain only pull
+// the top few via findRelevantChunks), but the noise still pollutes
+// retrieval quality and needlessly bloats the Document record. We now run
+// the same boilerplate/noise stripper the AI Intelligence pipeline uses
+// before chunking, and cap the result so a single upload can't runaway.
+const MAX_STORED_CHUNKS = 60;
+
 /**
  * Split text into chunks for better AI processing
  * @param {string} text - Full text to chunk
@@ -10,8 +23,13 @@ export const chunkText = (text, chunkSize = 500, overlap = 50) => {
         return [];
     }
 
+    // Strip acknowledgements/copyright/index/bibliography/references/
+    // appendix, blank pages, and repeated headers/footers/paragraphs
+    // BEFORE chunking — shrinks both chunk count and stored text size.
+    const noiseFree = stripBoilerplate(text) || text;
+
     // Clean text while preserving paragraph structure
-    const cleanedText = text
+    const cleanedText = noiseFree
         .replace(/\r\n/g, '\n')
         .replace(/\s+/g, ' ')
         .replace(/\n /g, '\n')
@@ -99,6 +117,28 @@ export const chunkText = (text, chunkSize = 500, overlap = 50) => {
 
             if (i + chunkSize >= allWords.length) break;
         }
+    }
+
+    // V4: hard cap on stored chunk count. A doc that still produces more
+    // than MAX_STORED_CHUNKS after boilerplate stripping (very large
+    // source, small chunkSize) gets its adjacent chunks merged pairwise
+    // until it's under the cap, same safety-net approach chunkService uses
+    // for the AI Intelligence pipeline.
+    while (chunks.length > MAX_STORED_CHUNKS) {
+        const merged = [];
+        for (let i = 0; i < chunks.length; i += 2) {
+            if (i + 1 < chunks.length) {
+                merged.push({
+                    content: `${chunks[i].content}\n\n${chunks[i + 1].content}`,
+                    chunkIndex: merged.length,
+                    pageNumber: 0,
+                });
+            } else {
+                merged.push({ ...chunks[i], chunkIndex: merged.length });
+            }
+        }
+        chunks.length = 0;
+        chunks.push(...merged);
     }
 
     return chunks;

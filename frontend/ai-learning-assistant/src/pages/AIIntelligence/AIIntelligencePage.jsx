@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BrainCircuit, Sparkles, Wand2, ArrowRight } from 'lucide-react';
+import {
+    ArrowRight,
+    BrainCircuit,
+    CheckCircle2,
+    FileText,
+    Sparkles,
+    Wand2,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import aiIntelligenceService from '../../services/aiIntelligenceService';
-
 import SourcePicker from './components/SourcePicker';
 import SummarySettings from './components/SummarySettings';
 import { DEFAULT_SETTINGS } from './components/summarySettingsDefaults';
@@ -13,49 +19,22 @@ import ProcessingScreen from './components/ProcessingScreen';
 import ResultsDashboard from './components/ResultsDashboard';
 import HistoryList from './components/HistoryList';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AIIntelligencePage
-//
-// Single orchestrator page for the AI Document Intelligence module. Drives a
-// 3-state UI:
-//   - idle        → source picker + settings + history
-//   - processing  → multi-stage progress screen (history still visible)
-//   - results     → results dashboard (compression stats + resources + actions)
-//
-// The Summary Viewer lives at a sibling route /ai-intelligence/:id so users
-// can share a URL or jump straight to a result from the history list. Saving
-// to Documents and Regenerating happen from inside the viewer too — this
-// page only owns the "first impression" experience.
-//
-// Routing note: when the user navigates here with `state: { reopenId }` we
-// auto-load that summary into the results view (used by the "Generate Again"
-// flow from the viewer page).
-// ─────────────────────────────────────────────────────────────────────────────
-
 const AIIntelligencePage = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // view state
-    const [view, setView] = useState('idle'); // 'idle' | 'processing' | 'results'
-
-    // generation state
+    const [view, setView] = useState('idle');
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
     const [source, setSource] = useState(null);
     const [pendingSummaryId, setPendingSummaryId] = useState(null);
     const [activeSummary, setActiveSummary] = useState(null);
     const [generating, setGenerating] = useState(false);
-
-    // results dashboard state
     const [savingToDocs, setSavingToDocs] = useState(false);
-
-    // history
     const [history, setHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(true);
 
     const sourceLabel = source?.label || activeSummary?.sourceTitle || 'Document.pdf';
 
-    // ── data fetch: history ──────────────────────────────────────────────────
     const fetchHistory = async () => {
         setHistoryLoading(true);
         try {
@@ -67,11 +46,11 @@ const AIIntelligencePage = () => {
             setHistoryLoading(false);
         }
     };
+
     useEffect(() => {
-        fetchHistory();
+        queueMicrotask(fetchHistory);
     }, []);
 
-    // ── deep-link via router state: ?reopenId or history nav ────────────────
     useEffect(() => {
         const reopenId = location.state?.reopenId;
         if (!reopenId) return;
@@ -86,12 +65,10 @@ const AIIntelligencePage = () => {
                 console.error('Reopen failed:', err);
             }
         })();
-        // Clear the router state so a back-nav doesn't loop forever.
         navigate(location.pathname, { replace: true, state: null });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.state?.reopenId]);
 
-    // ── handlers ─────────────────────────────────────────────────────────────
     const canGenerate = !!source && !generating;
 
     const startGeneration = async () => {
@@ -99,17 +76,13 @@ const AIIntelligencePage = () => {
             toast.error('Pick a document or upload a PDF first.');
             return;
         }
+
         setActiveSummary(null);
         setPendingSummaryId(null);
         setView('processing');
         setGenerating(true);
 
         try {
-            // V2 contract: backend returns immediately with `{ summaryId,
-            // status: 'processing', stagePlan }`. The ProcessingScreen
-            // subscribes to SSE for live progress; when the pipeline emits
-            // `pipeline:complete`, we fetch the full doc and transition to
-            // the results dashboard.
             const res = await aiIntelligenceService.generate({
                 source:
                     source.kind === 'file'
@@ -120,7 +93,6 @@ const AIIntelligencePage = () => {
             const summaryId = res?.data?.summaryId;
             if (!summaryId) throw new Error('Generation did not return a summary id.');
             setPendingSummaryId(summaryId);
-            // Refresh history so the new "Processing…" row appears underneath.
             fetchHistory();
         } catch (err) {
             console.error('AI summary generation failed:', err);
@@ -130,7 +102,6 @@ const AIIntelligencePage = () => {
         }
     };
 
-    // Called by ProcessingScreen when the SSE stream emits pipeline:complete.
     const handleProcessingComplete = async () => {
         if (!pendingSummaryId) return;
         try {
@@ -149,25 +120,20 @@ const AIIntelligencePage = () => {
         }
     };
 
-    // Called by ProcessingScreen when the SSE stream emits pipeline:failed.
     const handleProcessingFailed = (errMsg) => {
         toast.error(`Generation failed: ${errMsg || 'unknown error'}`);
         setView('idle');
         setGenerating(false);
-        // History row still exists in 'failed' state — refresh it so the
-        // history list shows the correct status pill.
         fetchHistory();
     };
 
-    // Results dashboard → "View Summary"
     const handleView = () => {
         if (activeSummary?._id) navigate(`/ai-intelligence/${activeSummary._id}`);
     };
 
-    // Results dashboard → "Download PDF"
     const handleDownload = async () => {
         if (!activeSummary?._id) return;
-        const tid = toast.loading('Preparing PDF…');
+        const tid = toast.loading('Preparing PDF...');
         try {
             const res = await aiIntelligenceService.downloadPdf(activeSummary._id);
             const url = res?.data?.url;
@@ -179,11 +145,10 @@ const AIIntelligencePage = () => {
         }
     };
 
-    // Results dashboard → "Save to Documents"
     const handleSaveToDocuments = async () => {
         if (!activeSummary?._id || activeSummary.savedToDocuments) return;
         setSavingToDocs(true);
-        const tid = toast.loading('Saving to Documents…');
+        const tid = toast.loading('Saving to Documents...');
         try {
             const res = await aiIntelligenceService.saveToDocuments(activeSummary._id);
             if (res?.data?.summary) {
@@ -198,16 +163,14 @@ const AIIntelligencePage = () => {
         }
     };
 
-    // Results dashboard → "Generate Again"
     const handleGenerateAgain = () => {
         setActiveSummary(null);
         setPendingSummaryId(null);
         setView('idle');
     };
 
-    // History → delete
     const handleDeleteHistory = async (item) => {
-        const tid = toast.loading('Deleting…');
+        const tid = toast.loading('Deleting...');
         try {
             await aiIntelligenceService.remove(item._id);
             setHistory((h) => h.filter((row) => row._id !== item._id));
@@ -217,110 +180,133 @@ const AIIntelligencePage = () => {
         }
     };
 
-    // ── render ───────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen w-full p-2 sm:p-4 space-y-6">
-            {/* page header */}
-            <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex items-start justify-between gap-4"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                        <BrainCircuit className="w-6 h-6 text-white" strokeWidth={2} />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-semibold text-violet-700 tracking-tight">
-                            AI Document Intelligence
-                        </h1>
-                        <p className="text-sm text-purple-500/80">
-                            Upload large PDFs, generate study-ready summaries, and save what you
-                            actually need.
-                        </p>
-                    </div>
-                </div>
-            </motion.div>
+        <div className="relative min-h-full overflow-hidden rounded-[28px] border border-white/15 bg-[#17072f] text-white shadow-2xl shadow-purple-950/30">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(236,72,153,0.28),transparent_28%),radial-gradient(circle_at_85%_12%,rgba(168,85,247,0.34),transparent_30%),linear-gradient(135deg,rgba(54,18,103,0.98),rgba(23,7,47,0.98)_52%,rgba(72,20,118,0.96))]" />
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
 
-            <AnimatePresence mode="wait">
-                {view === 'idle' && (
-                    <motion.div
-                        key="idle"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.25 }}
-                        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-                    >
-                        <div className="lg:col-span-1 space-y-6">
-                            <SourcePicker value={source} onChange={setSource} disabled={generating} />
-                            <GenerateCTA
-                                disabled={!canGenerate}
-                                source={source}
-                                settings={settings}
-                                onClick={startGeneration}
-                            />
+            <div className="relative p-4 sm:p-6 xl:p-8">
+                <motion.header
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
+                >
+                    <div className="max-w-3xl">
+                        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-purple-100 backdrop-blur-xl">
+                            <Sparkles className="h-3.5 w-3.5 text-fuchsia-200" strokeWidth={2.4} />
+                            MeetMind AI Workspace
                         </div>
-                        <div className="lg:col-span-2">
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 shadow-xl shadow-fuchsia-950/30 backdrop-blur-xl">
+                                <BrainCircuit className="h-7 w-7 text-fuchsia-100" strokeWidth={2} />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                                    AI Document Intelligence
+                                </h1>
+                                <p className="mt-2 max-w-2xl text-sm leading-6 text-purple-100/80">
+                                    Upload a PDF or choose from Documents, tune the summary output,
+                                    then generate a study-ready AI package from the same trusted flow.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/15 bg-white/10 p-2 backdrop-blur-xl">
+                        <Metric icon={FileText} label="Source" value={source ? 'Selected' : 'Needed'} />
+                        <Metric icon={Wand2} label="Mode" value={settings.summaryLength === 'auto' ? 'Auto' : `${settings.summaryLength}p`} />
+                        <Metric icon={CheckCircle2} label="History" value={history.length} />
+                    </div>
+                </motion.header>
+
+                <AnimatePresence mode="wait">
+                    {view === 'idle' && (
+                        <motion.div
+                            key="idle"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.25 }}
+                            className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.4fr)]"
+                        >
+                            <div className="space-y-5">
+                                <SourcePicker value={source} onChange={setSource} disabled={generating} />
+                                <GenerateCTA
+                                    disabled={!canGenerate}
+                                    source={source}
+                                    settings={settings}
+                                    onClick={startGeneration}
+                                />
+                            </div>
                             <SummarySettings
                                 value={settings}
                                 onChange={setSettings}
                                 disabled={generating}
                             />
-                        </div>
-                    </motion.div>
-                )}
+                        </motion.div>
+                    )}
 
-                {view === 'processing' && (
-                    <motion.div
-                        key="processing"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.25 }}
-                    >
-                        <ProcessingScreen
-                            summaryId={pendingSummaryId}
-                            fileLabel={sourceLabel}
-                            onPipelineComplete={handleProcessingComplete}
-                            onPipelineFailed={handleProcessingFailed}
-                        />
-                    </motion.div>
-                )}
+                    {view === 'processing' && (
+                        <motion.div
+                            key="processing"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.25 }}
+                        >
+                            <ProcessingScreen
+                                summaryId={pendingSummaryId}
+                                fileLabel={sourceLabel}
+                                onPipelineComplete={handleProcessingComplete}
+                                onPipelineFailed={handleProcessingFailed}
+                            />
+                        </motion.div>
+                    )}
 
-                {view === 'results' && activeSummary && (
-                    <motion.div
-                        key="results"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.25 }}
-                    >
-                        <ResultsDashboard
-                            summary={activeSummary}
-                            saving={savingToDocs}
-                            onView={handleView}
-                            onDownload={handleDownload}
-                            onSaveToDocuments={handleSaveToDocuments}
-                            onRegenerateAgain={handleGenerateAgain}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    {view === 'results' && activeSummary && (
+                        <motion.div
+                            key="results"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.25 }}
+                        >
+                            <ResultsDashboard
+                                summary={activeSummary}
+                                saving={savingToDocs}
+                                onView={handleView}
+                                onDownload={handleDownload}
+                                onSaveToDocuments={handleSaveToDocuments}
+                                onRegenerateAgain={handleGenerateAgain}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-            {/* history rail (always visible) */}
-            <HistoryList
-                items={history}
-                loading={historyLoading}
-                onDelete={handleDeleteHistory}
-                onRefresh={fetchHistory}
-            />
+                <div className="mt-5">
+                    <HistoryList
+                        items={history}
+                        loading={historyLoading}
+                        onDelete={handleDeleteHistory}
+                        onRefresh={fetchHistory}
+                    />
+                </div>
+            </div>
         </div>
     );
 };
 
-// ── small inline CTA panel ─────────────────────────────────────────────────
+const Metric = ({ icon: Icon, label, value }) => (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/10 px-3 py-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-purple-100/65">
+            <Icon className="h-3.5 w-3.5 text-fuchsia-200" strokeWidth={2.4} />
+            {label}
+        </div>
+        <div className="mt-1 truncate text-sm font-bold text-white">{value}</div>
+    </div>
+);
+
 const GenerateCTA = ({ disabled, onClick, source, settings }) => {
     const studyGoalLabels = {
         exam_tomorrow: 'Exam Tomorrow',
@@ -335,45 +321,52 @@ const GenerateCTA = ({ disabled, onClick, source, settings }) => {
         5: '5 Pages',
         10: '10 Pages',
     };
+
     return (
-        <motion.div
+        <motion.section
             whileHover={!disabled ? { y: -2 } : undefined}
-            className="bg-gradient-to-br from-purple-500 via-fuchsia-500 to-pink-500 rounded-2xl p-5 shadow-xl shadow-purple-500/30 text-white"
+            className="overflow-hidden rounded-2xl border border-white/20 bg-white/12 shadow-2xl shadow-purple-950/25 backdrop-blur-2xl"
         >
-            <div className="flex items-center gap-2 mb-2">
-                <Wand2 className="w-4 h-4" strokeWidth={2.4} />
-                <p className="text-xs uppercase tracking-wide font-bold text-white/90">
-                    Ready when you are
+            <div className="border-b border-white/10 bg-gradient-to-r from-fuchsia-500/20 via-purple-500/20 to-violet-500/20 p-5">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-fuchsia-100">
+                    <Wand2 className="h-4 w-4" strokeWidth={2.4} />
+                    Generate Button
+                </div>
+                <h2 className="mt-2 text-xl font-bold text-white">Create AI Summary</h2>
+                <p className="mt-1 text-sm leading-5 text-purple-100/75">
+                    Starts the existing backend generation flow with your selected source and settings.
                 </p>
             </div>
-            <h3 className="text-lg font-semibold leading-tight">Generate AI Summary</h3>
-            <p className="text-xs text-white/85 mt-1">
-                Goal:{' '}
-                <span className="font-semibold">
-                    {studyGoalLabels[settings.studyGoal] || '—'}
-                </span>{' '}
-                · Length:{' '}
-                <span className="font-semibold">
-                    {lengthLabels[settings.summaryLength] || '—'}
-                </span>
-            </p>
-            <p className="text-xs text-white/75 mt-2 truncate">
-                Source:{' '}
-                <span className="font-semibold">
-                    {source?.label || 'No source selected'}
-                </span>
-            </p>
-            <button
-                type="button"
-                disabled={disabled}
-                onClick={onClick}
-                className="mt-4 w-full inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-white text-violet-700 font-semibold text-sm shadow-lg shadow-purple-900/20 hover:bg-purple-50 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                <Sparkles className="w-4 h-4" strokeWidth={2.4} />
-                Generate Summary
-                <ArrowRight className="w-4 h-4" strokeWidth={2.4} />
-            </button>
-        </motion.div>
+
+            <div className="space-y-3 p-5">
+                <div className="rounded-xl border border-white/10 bg-white/10 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-purple-100/65">Source</span>
+                        <span className="min-w-0 truncate font-semibold text-white">
+                            {source?.label || 'No source selected'}
+                        </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                        <span className="text-purple-100/65">Settings</span>
+                        <span className="font-semibold text-white">
+                            {studyGoalLabels[settings.studyGoal] || 'Custom'} /{' '}
+                            {lengthLabels[settings.summaryLength] || 'Custom'}
+                        </span>
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={onClick}
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-400 via-purple-400 to-violet-400 px-4 text-sm font-bold text-white shadow-xl shadow-fuchsia-950/30 transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                    <Sparkles className="h-4 w-4" strokeWidth={2.4} />
+                    Generate Summary
+                    <ArrowRight className="h-4 w-4" strokeWidth={2.4} />
+                </button>
+            </div>
+        </motion.section>
     );
 };
 

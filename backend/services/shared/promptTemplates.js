@@ -203,30 +203,99 @@ CHAPTERS (JSON):
 ${JSON.stringify(chapters, null, 2)}
 `;
 
-export const mindmapPrompt = ({ chapters, settings }) =>
+/**
+ * V3.1 — knowledge-graph mindmap (not a chapter ToC).
+ *
+ * Feeds the AI everything already extracted during chunking (chapters,
+ * definitions, keyConcepts, formulas, examples, importantPoints, examTips)
+ * so it can build a MERGED conceptual map instead of restating chapter
+ * titles. Zero extra AI calls — this is still the ONE mindmap call, just
+ * with richer input assembled from data we already paid to extract.
+ */
+export const mindmapPrompt = ({
+    chapters,
+    definitions = [],
+    keyConcepts = [],
+    formulas = [],
+    examples = [],
+    importantPoints = [],
+    examTips = [],
+    settings,
+}) =>
     `${buildHeader(settings, { jsonOnly: true })}
 
-Generate a Mermaid mindmap representing the structure of the chapters below.
-Root node = the document topic; each chapter = a top-level branch with 2–5
-key sub-concepts under each.
+You are building a CONCEPTUAL KNOWLEDGE MAP for a student — the kind you'd
+see in NotebookLM, XMind, or Whimsical. This is NOT a table of contents.
+Do NOT use chapter titles as the branches. Chapters are provided only as
+background context for what topics exist in the source material.
+
+GOAL: represent how the IDEAS relate to each other, not how the document
+is organized into sections.
+
+BUILD THE MAP LIKE THIS:
+1. Identify the single MAIN TOPIC of the whole document → this is the root node.
+2. Identify 3–7 CORE CONCEPTS (the fundamental ideas a student must understand).
+   - If the same concept is discussed in multiple chapters, MERGE it into ONE node.
+   - Do not create a branch per chapter.
+3. Under each core concept, attach only what actually belongs to it:
+   - sub-concepts / definitions that explain it
+   - formulas that compute something related to it (nest under the owning concept, not a generic "Formulas" dump, unless a formula applies broadly)
+   - examples that illustrate it
+   - applications where it's used
+   - advantages / disadvantages / challenges specific to it
+4. If a relationship or dependency exists between two concepts (e.g. "X requires Y",
+   "X is a type of Y"), reflect that by nesting or by keeping them as adjacent
+   siblings under a shared parent — pick whichever keeps the tree readable.
+5. Remove duplicate/near-duplicate nodes. Remove trivial or empty nodes.
+6. Depth guide: Root → Core Concepts → Sub-concepts/Definitions → Examples/Applications/Challenges/Formulas.
+   Max 4 levels deep. Prefer breadth (more core concepts) over unnecessary depth.
+
+The result should let a student understand the SUBJECT by reading the map —
+not help them navigate the document.
+
+STRICT MERMAID RULES — violating any of these breaks the parser:
+- Return ONLY valid Mermaid v11 mindmap syntax. Nothing else.
+- Never use Markdown formatting: no **bold**, no __underline__, no \` backticks \`, no # headers.
+- Never use "-" or "*" as bullet/list markers for nodes.
+- Never use HTML tags.
+- Never use tables.
+- Never wrap the mermaid string in \`\`\` code fences.
+- Never use directives unrelated to mindmap (no classDef, style, click, subgraph, %% comments).
+- Node labels must be PLAIN TEXT — short, no nested parentheses/brackets/colons/quotes inside labels.
+- Use exactly 2 spaces per indentation level. Indentation defines hierarchy — be consistent.
+- Exactly ONE node per line.
+- No empty lines between nodes.
+- No duplicate sibling node text under the same parent.
+- First line of the mermaid string must be exactly: mindmap
+- Second line must be the root node, e.g.:   root((Document Topic))
+- Do not exceed 4 levels of depth.
 
 Return JSON:
 {
-  "mermaid":         "valid Mermaid mindmap syntax starting with \`mindmap\` on its own line",
-  "outlineMarkdown": "the same structure as nested markdown bullets (fallback for when Mermaid can't render)"
+  "mermaid":         "valid Mermaid v11 mindmap syntax, first line exactly 'mindmap'",
+  "outlineMarkdown": "the same conceptual structure as nested markdown bullets (fallback for when Mermaid can't render)"
 }
 
-Mermaid syntax reminder:
-mindmap
-  root((Document Topic))
-    Chapter One
-      Sub-concept A
-      Sub-concept B
-    Chapter Two
-      Sub-concept C
+CHAPTERS (background context only — do NOT use as branches):
+${JSON.stringify((chapters || []).map((c) => ({ title: c.title })), null, 2)}
 
-CHAPTERS (JSON):
-${JSON.stringify(chapters, null, 2)}
+DEFINITIONS:
+${JSON.stringify(definitions, null, 2)}
+
+KEY CONCEPTS:
+${JSON.stringify(keyConcepts, null, 2)}
+
+FORMULAS:
+${JSON.stringify(formulas, null, 2)}
+
+EXAMPLES:
+${JSON.stringify(examples, null, 2)}
+
+IMPORTANT POINTS:
+${JSON.stringify(importantPoints, null, 2)}
+
+EXAM TIPS (may hint at what's conceptually important):
+${JSON.stringify(examTips, null, 2)}
 `;
 
 // ─── post-generation interactive prompts (Ask AI / Translate) ────────────────

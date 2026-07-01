@@ -21,6 +21,21 @@
  * @property {number} [temperature]    Defaults to 0.5 (study material is mostly
  *                                     factual — we keep this on the lower end).
  * @property {AbortSignal} [signal]    Optional abort signal.
+ * @property {'fast'|'medium'|'best'} [tier]
+ *                                     Model routing hint. Every concrete
+ *                                     provider maps this to one of its own
+ *                                     models via a `_modelFor(options)`
+ *                                     helper; providers without distinct
+ *                                     tiers just map all three to the same
+ *                                     model. Routing table:
+ *                                       fast   → chunk extraction / summaries
+ *                                       medium → chapter merge, flashcards, quiz
+ *                                       best   → final summary, mind map
+ *                                     Default (unset) behaves as 'medium'.
+ * @property {string}  [label]        Human-readable call label for logs.
+ * @property {boolean} [noCache]      Skip the chain-level response cache
+ *                                     (see providers/chain.js) for calls
+ *                                     that must not be memoised, e.g. "ask".
  */
 
 export class BaseProvider {

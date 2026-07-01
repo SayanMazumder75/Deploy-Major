@@ -59,7 +59,8 @@ import {
 import { intelligenceChain } from '../providers/intelligence.js';
 import { pLimit } from './concurrency.js';
 
-import { semanticChunk, computeTargetWords } from './chunkService.js';
+import { computeTargetWords } from './chunkService.js';
+import { reduceDocumentForAI } from './documentReductionService.js';
 import {
     extractChunk,
     mergeChunkResults,
@@ -84,10 +85,10 @@ const CHUNK_CONCURRENCY = 2;
 const STAGE_PLAN = [
     { id: 'ingest', label: 'Ingesting document' },
     { id: 'ocr', label: 'OCR (scanned-page recovery)' },
-    { id: 'chunk', label: 'Splitting into semantic chunks' },
-    { id: 'extract', label: 'AI processing each chunk' },
-    { id: 'merge', label: 'Merging chunk results' },
-    { id: 'rewrite', label: 'AI rewrite pass' },
+    { id: 'chunk', label: 'Reducing document before AI' },
+    { id: 'extract', label: 'Generating mini summaries' },
+    { id: 'merge', label: 'Merging mini summaries' },
+    { id: 'rewrite', label: 'Generating final summary JSON' },
     { id: 'flashcards', label: 'Generating flashcards' },
     { id: 'quiz', label: 'Generating quiz' },
     { id: 'viva', label: 'Generating viva questions' },
@@ -284,6 +285,7 @@ const computeInsights = ({
     diagrams,
     rawMarkdown,
     targetWords,
+    reductionMetrics = null,
 }) => {
     const actualWords = wordCount(rawMarkdown);
     // V3 spec: reading time = words / 220 (slightly slower than V2's 250
@@ -314,6 +316,12 @@ const computeInsights = ({
         difficulty,
         targetWords,
         actualWords,
+        sourceWordCount: reductionMetrics?.sourceWordCount || 0,
+        cleanedWordCount: reductionMetrics?.cleanedWordCount || 0,
+        candidateChunkCount: reductionMetrics?.candidateChunkCount || 0,
+        selectedChunkCount: reductionMetrics?.selectedChunkCount || 0,
+        selectedWordCount: reductionMetrics?.selectedWordCount || 0,
+        tokenReductionPercent: reductionMetrics?.tokenReductionPercent || 0,
     };
 };
 
@@ -408,9 +416,25 @@ export const runIntelligencePipeline = async ({
 
         // ── 3. chunk ───────────────────────────────────────────────────
         startStage(summaryId, 'chunk');
-        const chunks = semanticChunk(workingText);
+        const reduced = reduceDocumentForAI(workingText, { budgetRatio: 0.3 });
+        const chunks = reduced.selectedChunks;
+        if (!chunks.length) {
+            throw new Error('Document reduction produced no usable chunks.');
+        }
+        insightsSoFar.chapterCount = reduced.metrics.chapterCount;
+        publishInsights(summaryId, {
+            ...insightsSoFar,
+            sourceWordCount: reduced.metrics.sourceWordCount,
+            selectedWordCount: reduced.metrics.selectedWordCount,
+            tokenReductionPercent: reduced.metrics.tokenReductionPercent,
+        });
         completeStage(summaryId, 'chunk', {
-            chunkCount: chunks.length,
+            chapterCount: reduced.metrics.chapterCount,
+            candidateChunkCount: reduced.metrics.candidateChunkCount,
+            selectedChunkCount: reduced.metrics.selectedChunkCount,
+            sourceWordCount: reduced.metrics.sourceWordCount,
+            selectedWordCount: reduced.metrics.selectedWordCount,
+            tokenReductionPercent: reduced.metrics.tokenReductionPercent,
             chunkTargetWords: computedTarget,
         });
 
@@ -442,6 +466,8 @@ export const runIntelligencePipeline = async ({
                     updateStageProgress(summaryId, 'extract', pct, {
                         completed: extractsCompleted,
                         totalChunks: chunks.length,
+                        selectedWordCount: reduced.metrics.selectedWordCount,
+                        tokenReductionPercent: reduced.metrics.tokenReductionPercent,
                     });
                     insightsSoFar.definitionCount += (result.definitions || []).length;
                     insightsSoFar.formulaCount += (result.formulas || []).length;
@@ -452,6 +478,7 @@ export const runIntelligencePipeline = async ({
         );
         completeStage(summaryId, 'extract', {
             extractedChunks: chunkResults.filter(Boolean).length,
+            tokenReductionPercent: reduced.metrics.tokenReductionPercent,
         });
 
         // ── 5. merge (LOCAL) ───────────────────────────────────────────
@@ -544,18 +571,24 @@ export const runIntelligencePipeline = async ({
             });
 
         const mindmapP = generateMindMap({
-            chapters: finalChapters.chapters,
-            settings,
-            chain,
-        })
-            .then((r) => {
-                completeStage(summaryId, 'mindmap', { hasMermaid: !!r.mermaid });
-                return r;
-            })
-            .catch((err) => {
-                failStage(summaryId, 'mindmap', err);
-                return { mermaid: '', outlineMarkdown: '' };
-            });
+    chapters: finalChapters.chapters,
+    definitions: merged.definitions,
+    keyConcepts: merged.keyConcepts,
+    formulas: merged.formulas,
+    examples: merged.examples,
+    importantPoints: merged.importantPoints,
+    examTips: merged.examTips,
+    settings,
+    chain,
+})
+    .then((r) => {
+        completeStage(summaryId, 'mindmap', { hasMermaid: !!r.mermaid });
+        return r;
+    })
+    .catch((err) => {
+        failStage(summaryId, 'mindmap', err);
+        return { mermaid: '', outlineMarkdown: '' };
+    });
 
         // Diagram detection — currently always skips today (NVIDIA pipeline
         // not yet enabled). When NVIDIA_API_KEY is provisioned + the
@@ -669,6 +702,7 @@ export const runIntelligencePipeline = async ({
             diagrams: allDiagrams.length,
             rawMarkdown: composed.rawMarkdown,
             targetWords: settingsTarget,
+            reductionMetrics: reduced.metrics,
         });
         completeStage(summaryId, 'compose');
 

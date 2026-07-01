@@ -10,8 +10,19 @@
 //                      the PDF builder (which can't run the Mermaid
 //                      renderer) and as a fallback if the SVG render fails
 
+// mindmapService (V3.1)
+//
+// Bundle stage — generates a KNOWLEDGE-GRAPH Mermaid mindmap from
+// everything already extracted during chunking (chapters, definitions,
+// keyConcepts, formulas, examples, importantPoints, examTips). ONE AI
+// call per generation, same as before — richer input, not more calls.
+//
+// Returns { mermaid, outlineMarkdown } — shape unchanged, viewer/PDF
+// builder need no changes.
+
 import { safeParseJson } from './shared/jsonParser.js';
 import { mindmapPrompt } from './shared/promptTemplates.js';
+import { generateMindmapSafe } from './shared/mermaidMindmapSanitizer.js';
 
 const sanitiseMermaid = (m) => {
     if (!m || typeof m !== 'string') return '';
@@ -34,7 +45,7 @@ export const generateMindMap = async ({ chapters, settings, chain }) => {
     try {
         const raw = await chain.generateJson(
             mindmapPrompt({ chapters, settings }),
-            { label: 'mindmap', maxTokens: 2048, temperature: 0.5 }
+            { label: 'mindmap', maxTokens: 2048, temperature: 0.5, tier: 'best' }
         );
         const parsed = safeParseJson(raw) || {};
         return {
