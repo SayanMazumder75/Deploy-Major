@@ -15,8 +15,15 @@ const studySessionSchema = new mongoose.Schema({
     color: { type: String, default: '#8B5CF6' },
     notes: { type: String, default: '' },
     completedAt: { type: Date, default: null },
-    originalDate: { type: Date, default: null }, // if rescheduled, original date
+    originalDate: { type: Date, default: null },
     aiGenerated: { type: Boolean, default: false },
+
+    // ✅ Three separate reminder flags
+    reminder30Sent:    { type: Boolean, default: false }, // 30 min before
+    reminder2Sent:     { type: Boolean, default: false }, // 2 min before
+    reminderStartSent: { type: Boolean, default: false }, // exact start time
+    reminder1DaySent:  { type: Boolean, default: false }, // ✅ 1 day before 
+
 }, { timestamps: true });
 
 export default mongoose.model('StudySession', studySessionSchema);
