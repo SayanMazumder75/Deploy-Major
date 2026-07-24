@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTheme } from '../../context/ThemeContext.jsx';
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -6,13 +6,6 @@ import Header from "./Header";
 const AppLayout = ({ children }) => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { isDark } = useTheme();
-    useEffect(() => {
-    if (isDark) {
-        document.documentElement.classList.add("dark");
-    } else {
-        document.documentElement.classList.remove("dark");
-    }
-}, [isDark]);
     const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
 
     return (

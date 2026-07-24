@@ -30,7 +30,7 @@ const StatusPill = ({ status }) => {
         );
     }
     return (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/40 bg-emerald-300/15 px-2.5 py-1 text-[11px] font-bold text-emerald-100">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/40 bg-emerald-300/15 px-2.5 py-1 text-[11px] font-bold text-emerald-500">
             <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
             Completed
         </span>

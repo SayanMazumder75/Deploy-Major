@@ -12,7 +12,7 @@
 
 export const MEETING_RECORDER_URL =
     import.meta.env.VITE_MEETING_RECORDER_URL ||
-    "https://deploy-whisper.vercel.app/";
+    "http://localhost:3000/";
 
 // Base path the Meeting Recorder is mounted at inside the main app.
 export const MEETING_RECORDER_ROUTE = "/meeting-recorder";

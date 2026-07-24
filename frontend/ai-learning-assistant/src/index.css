@@ -2,11 +2,13 @@
 
 @import "tailwindcss";
 
+/* Keep `dark:` utilities tied to the in-app switch, not the device setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-display: "Urbanist", sans-serif;
   --breakpoint-3xl: 1920px;
   --color-primary: #FF9324;
-  --dark-mode: class;
 }
 
 @layer base {
@@ -175,5 +177,105 @@
 
   html.dark .hover\:bg-slate-100:hover {
     background-color: #2d1060 !important;
+  }
+
+  /* Study Calendar uses neutral utility colors throughout its grid and dialogs. */
+  html.dark .study-calendar {
+    color: #ffffff;
+  }
+
+  html.dark .study-calendar .text-gray-800 {
+    color: #ffffff !important;
+  }
+
+  html.dark .study-calendar .text-gray-700,
+  html.dark .study-calendar .text-gray-600,
+  html.dark .study-calendar .text-gray-500,
+  html.dark .study-calendar .text-gray-400 {
+    color: #ffffff !important;
+  }
+
+  html.dark .study-calendar .border-gray-100,
+  html.dark .study-calendar .border-gray-200 {
+    border-color: rgba(148, 163, 184, 0.2) !important;
+  }
+
+  html.dark .study-calendar .bg-gray-50,
+  html.dark .study-calendar .bg-gray-50\/70,
+  html.dark .study-calendar .bg-gray-50\/50,
+  html.dark .study-calendar .bg-gray-100 {
+    background-color: #1a0a3a !important;
+  }
+
+  html.dark .study-calendar .bg-violet-50 {
+    background-color: rgba(91, 33, 182, 0.28) !important;
+  }
+
+  html.dark .study-calendar .bg-red-50 {
+    background-color: rgba(127, 29, 29, 0.28) !important;
+  }
+
+  html.dark .study-calendar input,
+  html.dark .study-calendar select,
+  html.dark .study-calendar textarea {
+    color: #ffffff;
+    background-color: #140c2a;
+    border-color: rgba(148, 163, 184, 0.28);
+  }
+
+  html.dark .study-calendar input::placeholder,
+  html.dark .study-calendar textarea::placeholder {
+    color: #e2e8f0;
+    opacity: 0.85;
+  }
+
+  /* AI Document Intelligence result cards use violet text on their light surfaces. */
+  html.dark .ai-intelligence .text-violet-900,
+  html.dark .ai-intelligence .text-violet-800,
+  html.dark .ai-intelligence .text-violet-700,
+  html.dark .ai-intelligence .text-violet-600,
+  html.dark .ai-intelligence .text-purple-700,
+  html.dark .ai-intelligence .text-purple-600,
+  html.dark .ai-intelligence .text-purple-500 {
+    color: #ffffff !important;
+  }
+
+  html.dark .ai-intelligence .border-purple-100,
+  html.dark .ai-intelligence .border-purple-200,
+  html.dark .ai-intelligence .border-purple-300 {
+    border-color: rgba(167, 139, 250, 0.3) !important;
+  }
+
+  html.dark .ai-intelligence .bg-purple-50,
+  html.dark .ai-intelligence .bg-purple-100 {
+    background-color: rgba(91, 33, 182, 0.28) !important;
+  }
+
+  /* The AI Intelligence setup panels were originally dark-only. */
+  html.light .ai-intelligence [class*="text-white"],
+  html.light .ai-intelligence [class*="text-purple-100"],
+  html.light .ai-intelligence [class*="text-fuchsia-100"] {
+    color: #312e81 !important;
+  }
+
+  html.light .ai-intelligence [class*="border-white"] {
+    border-color: rgba(139, 92, 246, 0.2) !important;
+  }
+
+  html.light .ai-intelligence input {
+    color: #312e81;
+    background-color: #ffffff;
+    border-color: rgba(139, 92, 246, 0.25);
+  }
+
+  html.light .ai-intelligence input::placeholder {
+    color: #7c3aed;
+    opacity: 0.65;
+  }
+
+  /* Preserve contrast for the primary gradient controls. */
+  html.light .ai-intelligence button[class*="bg-gradient"]:not([class*="bg-white"]),
+  html.light .ai-intelligence button[class*="bg-gradient"]:not([class*="bg-white"]) * {
+    color: #ffffff !important;
   }
 }

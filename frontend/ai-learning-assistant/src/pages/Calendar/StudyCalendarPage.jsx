@@ -20,8 +20,8 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl dark:shadow-purple-950/40 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-slate-700">
                     <h2 className="text-xl font-bold text-gray-800">{title}</h2>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 transition-all">✕</button>
                 </div>
@@ -368,7 +368,7 @@ const StudyCalendarPage = () => {
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-pink-50 p-4 md:p-8">
+        <div className="study-calendar min-h-screen bg-gradient-to-br from-violet-50 via-white to-pink-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 md:p-8 transition-colors duration-300">
             <div className="max-w-6xl mx-auto">
 
                 {/* Header */}
@@ -411,7 +411,7 @@ const StudyCalendarPage = () => {
                 )}
 
                 {/* View Tabs */}
-                <div className="bg-white rounded-2xl p-1 flex gap-1 mb-6 shadow-sm border border-gray-100 w-fit">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl p-1 flex gap-1 mb-6 shadow-sm border border-gray-100 dark:border-slate-700 w-fit">
                     {[['month', '📅 Month'], ['week', '📆 Week'], ['analytics', '📊 Analytics']].map(([v, label]) => (
                         <button key={v} onClick={() => setView(v)}
                             className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${view === v ? 'bg-gradient-to-r from-violet-500 to-pink-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -445,7 +445,7 @@ const StudyCalendarPage = () => {
 
                 {/* Calendar Grid */}
                 {view === 'month' && (
-                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-slate-700">
                         <div className="grid grid-cols-7 gap-2 mb-3">
                             {DAYS.map(d => <div key={d} className="text-center text-xs font-bold text-gray-400 uppercase py-1">{d}</div>)}
                         </div>
@@ -454,7 +454,7 @@ const StudyCalendarPage = () => {
                 )}
 
                 {view === 'week' && (
-                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-slate-700">
                         {renderWeekView()}
                     </div>
                 )}

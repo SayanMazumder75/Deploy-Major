@@ -82,8 +82,8 @@ const StudyVaultPage = () => {
                     >
                         {/* Document Header */}
                         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-                            <div>
-                                <h2 className="text-3xl font-bold text-violet-800 dark:text-purple-300">
+                            <div className="min-w-0 flex-1">
+                                <h2 className="text-3xl font-bold text-violet-800 dark:text-purple-300 break-words [overflow-wrap:anywhere]">
                                     {group.title}
                                 </h2>
                                 <p className="text-purple-500 dark:text-purple-400 mt-1">
@@ -156,7 +156,7 @@ const StudyVaultPage = () => {
                                         </p>
 
                                         {/* Title */}
-                                        <h3 className="text-base font-bold text-violet-800 dark:text-purple-200 mb-3">
+                                        <h3 className="text-base font-bold text-violet-800 dark:text-purple-200 mb-3 break-words [overflow-wrap:anywhere]">
                                             {resource.title}
                                         </h3>
 

@@ -8,13 +8,10 @@ export const ThemeProvider = ({ children }) => {
     });
 
     useEffect(() => {
-        if (isDark) {
-            document.documentElement.classList.add("dark");
-            localStorage.setItem("theme", "dark");
-        } else {
-            document.documentElement.classList.remove("dark");
-            localStorage.setItem("theme", "light");
-        }
+        const root = document.documentElement;
+        root.classList.toggle("dark", isDark);
+        root.classList.toggle("light", !isDark);
+        localStorage.setItem("theme", isDark ? "dark" : "light");
     }, [isDark]);
 
     const toggleTheme = () => {
